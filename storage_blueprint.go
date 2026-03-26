@@ -10,39 +10,57 @@ const (
 )
 
 var (
+	zeroFoo Foo
+	zeroBar Bar
+)
+
+var (
 	deleteFunctions = []func(store *Store, key entityKey){
 		// Foos
 		func(store *Store, key entityKey) {
-			deleted := store.foos[key.index]
+			deleted := store.foos.ids[key.index]
 
-			store.foos[key.index] = store.foos[len(store.foos)-1]
-			store.foos[len(store.foos)-1] = entityFoo{} // this line prevents memory leak of any underlying pointer values in Fooer (until next append)
-			store.foos = store.foos[:len(store.foos)-1]
+			store.foos.ids[key.index] = store.foos.ids[len(store.foos.ids)-1]
+			store.foos.ids = store.foos.ids[:len(store.foos.ids)-1]
 
-			store.ids[deleted.id] = nil
-			store.ids[store.foos[key.index].id].index = key.index
+			store.foos.foos[key.index] = store.foos.foos[len(store.foos.foos)-1]
+			store.foos.foos[len(store.foos.foos)-1] = zeroFoo // this line prevents memory leak of any underlying pointer values in Fooer (until next append)
+			store.foos.foos = store.foos.foos[:len(store.foos.foos)-1]
+
+			store.ids[deleted] = nil
+			store.ids[store.foos.ids[key.index]].index = key.index
 		},
 		// Bars
 		func(store *Store, key entityKey) {
-			deleted := store.bars[key.index]
+			deleted := store.bars.ids[key.index]
 
-			store.bars[key.index] = store.bars[len(store.bars)-1]
-			store.bars[len(store.bars)-1] = entityBar{} // this line prevents memory leak of any underlying pointer values in Fooer (until next append)
-			store.bars = store.bars[:len(store.bars)-1]
+			store.bars.ids[key.index] = store.bars.ids[len(store.bars.ids)-1]
+			store.bars.ids = store.bars.ids[:len(store.bars.ids)-1]
 
-			store.ids[deleted.id] = nil
-			store.ids[store.bars[key.index].id].index = key.index
+			store.bars.bars[key.index] = store.bars.bars[len(store.bars.bars)-1]
+			store.bars.bars[len(store.bars.bars)-1] = zeroBar // this line prevents memory leak of any underlying pointer values in Fooer (until next append)
+			store.bars.bars = store.bars.bars[:len(store.bars.bars)-1]
+
+			store.ids[deleted] = nil
+			store.ids[store.bars.ids[key.index]].index = key.index
 		},
 		// FooBars
 		func(store *Store, key entityKey) {
-			deleted := store.fooBars[key.index]
+			deleted := store.fooBars.ids[key.index]
 
-			store.fooBars[key.index] = store.fooBars[len(store.fooBars)-1]
-			store.fooBars[len(store.fooBars)-1] = entityFooBar{} // this line prevents memory leak of any underlying pointer values in Fooer (until next append)
-			store.fooBars = store.fooBars[:len(store.fooBars)-1]
+			store.fooBars.ids[key.index] = store.fooBars.ids[len(store.fooBars.ids)-1]
+			store.fooBars.ids = store.fooBars.ids[:len(store.fooBars.ids)-1]
 
-			store.ids[deleted.id] = nil
-			store.ids[store.fooBars[key.index].id].index = key.index
+			store.fooBars.foos[key.index] = store.fooBars.foos[len(store.fooBars.foos)-1]
+			store.fooBars.foos[len(store.fooBars.foos)-1] = zeroFoo // this line prevents memory leak of any underlying pointer values in Fooer (until next append)
+			store.fooBars.foos = store.fooBars.foos[:len(store.fooBars.foos)-1]
+
+			store.fooBars.bars[key.index] = store.fooBars.bars[len(store.fooBars.bars)-1]
+			store.fooBars.bars[len(store.fooBars.bars)-1] = zeroBar // this line prevents memory leak of any underlying pointer values in Fooer (until next append)
+			store.fooBars.bars = store.fooBars.bars[:len(store.fooBars.bars)-1]
+
+			store.ids[deleted] = nil
+			store.ids[store.fooBars.ids[key.index]].index = key.index
 		},
 	}
 )
@@ -57,20 +75,20 @@ type Foo int
 type Bar string
 
 // archetypes -- these are auto generated
-type entityFoo struct {
-	id  int
-	foo Foo
+type storeFoo struct {
+	ids  []int
+	foos []Foo
 }
 
-type entityBar struct {
-	id  int
-	bar Bar
+type storeBar struct {
+	ids  []int
+	bars []Bar
 }
 
-type entityFooBar struct {
-	id  int
-	foo Foo
-	bar Bar
+type storeFooBar struct {
+	ids  []int
+	foos []Foo
+	bars []Bar
 }
 
 // storage -- boilerplate
@@ -78,84 +96,170 @@ type Store struct {
 	ids []*entityKey
 
 	// entity storage
-	foos    []entityFoo
-	bars    []entityBar
-	fooBars []entityFooBar
+	foos    storeFoo
+	bars    storeBar
+	fooBars storeFooBar
 }
 
 // storage funcs -- boilerplate
-func (s *Store) GetFoo(id int) *Foo {
-	key := s.ids[id]
-
-	return &s.foos[key.index].foo
+type FooAccessor struct {
+	current   int
+	ids       [][]int
+	slicesFoo [][]Foo
 }
 
-func (s *Store) GetBar(id int) *Bar {
-	key := s.ids[id]
-
-	return &s.bars[key.index].bar
-}
-
-func (s *Store) GetFooBar(id int) (*Foo, *Bar) {
-	key := s.ids[id]
-
-	return &s.fooBars[key.index].foo, &s.fooBars[key.index].bar
-}
-
-func (s *Store) ForEachFoo(fn func(id int, foo *Foo)) {
-	for i := range s.foos {
-		fn(
-			s.foos[i].id,
-			&s.foos[i].foo,
-		)
+func (a *FooAccessor) Next() bool {
+	if a.current < len(a.ids)-1 {
+		return false
 	}
 
-	for i := range s.fooBars {
-		fn(
-			s.fooBars[i].id,
-			&s.fooBars[i].foo,
-		)
+	a.current++
+
+	return true
+}
+
+type FooResult struct {
+	IDs  []int
+	Foos []Foo
+}
+
+func (a *FooAccessor) Foos() FooResult {
+	return FooResult{
+		IDs:  a.ids[a.current],
+		Foos: a.slicesFoo[a.current],
 	}
 }
 
-func (s *Store) ForEachBar(fn func(id int, bar *Bar)) {
-	for i := range s.bars {
-		fn(
-			s.bars[i].id,
-			&s.bars[i].bar,
-		)
+type BarResult struct {
+	IDs  []int
+	Bars []Bar
+}
+
+type BarAccessor struct {
+	current   int
+	ids       [][]int
+	slicesBar [][]Bar
+}
+
+func (a *BarAccessor) Next() bool {
+	if a.current < len(a.ids)-1 {
+		return false
 	}
 
-	for i := range s.fooBars {
-		fn(
-			s.fooBars[i].id,
-			&s.fooBars[i].bar,
-		)
+	a.current++
+
+	return true
+}
+
+func (a *BarAccessor) Bars() BarResult {
+	return BarResult{
+		IDs:  a.ids[a.current],
+		Bars: a.slicesBar[a.current],
 	}
 }
 
-func (s *Store) ForEachFooBar(fn func(id int, foo *Foo, bar *Bar)) {
-	for i := range s.fooBars {
-		fn(
-			s.fooBars[i].id,
-			&s.fooBars[i].foo,
-			&s.fooBars[i].bar,
-		)
+type FooBarResult struct {
+	IDs  []int
+	Foos []Foo
+	Bars []Bar
+}
+
+type FooBarAccessor struct {
+	current   int
+	ids       [][]int
+	slicesFoo [][]Foo
+	slicesBar [][]Bar
+}
+
+func (a *FooBarAccessor) Next() bool {
+	if a.current < len(a.ids)-1 {
+		return false
+	}
+
+	a.current++
+
+	return true
+}
+
+func (a *FooBarAccessor) FooBars() FooBarResult {
+	return FooBarResult{
+		IDs:  a.ids[a.current],
+		Foos: a.slicesFoo[a.current],
+		Bars: a.slicesBar[a.current],
+	}
+}
+
+func (s *Store) FooByID(id int) *Foo {
+	index := s.ids[id].index
+
+	return &s.foos.foos[index]
+}
+
+func (s *Store) Foos() *FooAccessor {
+	return &FooAccessor{
+		current: 0,
+		ids: [][]int{
+			s.foos.ids,
+			s.fooBars.ids,
+		},
+		slicesFoo: [][]Foo{
+			s.foos.foos,
+			s.fooBars.foos,
+		},
+	}
+}
+
+func (s *Store) BarByID(id int) *Bar {
+	index := s.ids[id].index
+
+	return &s.bars.bars[index]
+}
+
+func (s *Store) Bars() *BarAccessor {
+	return &BarAccessor{
+		current: 0,
+		ids: [][]int{
+			s.bars.ids,
+			s.fooBars.ids,
+		},
+		slicesBar: [][]Bar{
+			s.bars.bars,
+			s.bars.bars,
+		},
+	}
+}
+
+func (s *Store) FooBarByID(id int) (*Foo, *Bar) {
+	index := s.ids[id].index
+
+	return &s.fooBars.foos[index], &s.fooBars.bars[index]
+}
+
+func (s *Store) FooBars() *FooBarAccessor {
+	return &FooBarAccessor{
+		current: 0,
+		ids: [][]int{
+			s.fooBars.ids,
+		},
+		slicesFoo: [][]Foo{
+			s.fooBars.foos,
+		},
+		slicesBar: [][]Bar{
+			s.fooBars.bars,
+		},
 	}
 }
 
 func (s *Store) PutFoo(foo Foo) int {
 	id := len(s.ids)
 
-	s.foos = append(s.foos, entityFoo{
-		id:  id,
-		foo: foo,
-	})
-
 	s.ids = append(s.ids, &entityKey{
 		archetype: archetypeIDFooer,
-		index:     len(s.foos),
+		index:     len(s.foos.ids),
 	})
+
+	s.foos.ids = append(s.foos.ids, id)
+	s.foos.foos = append(s.foos.foos, foo)
 
 	return id
 }
@@ -163,32 +267,28 @@ func (s *Store) PutFoo(foo Foo) int {
 func (s *Store) PutBar(bar Bar) int {
 	id := len(s.ids)
 
-	s.bars = append(s.bars, entityBar{
-		id:  id,
-		bar: bar,
-	})
-
 	s.ids = append(s.ids, &entityKey{
 		archetype: archetypeIDBarer,
-		index:     len(s.bars),
+		index:     len(s.bars.ids),
 	})
+
+	s.bars.ids = append(s.bars.ids, id)
+	s.bars.bars = append(s.bars.bars, bar)
 
 	return id
 }
 
-func (s *Store) PutFooBarer(foo Foo, bar Bar) int {
+func (s *Store) PutFooBar(foo Foo, bar Bar) int {
 	id := len(s.ids)
-
-	s.fooBars = append(s.fooBars, entityFooBar{
-		id:  id,
-		foo: foo,
-		bar: bar,
-	})
 
 	s.ids = append(s.ids, &entityKey{
 		archetype: archetypeIDFooBarer,
-		index:     len(s.fooBars),
+		index:     len(s.fooBars.ids),
 	})
+
+	s.fooBars.ids = append(s.fooBars.ids, id)
+	s.fooBars.foos = append(s.fooBars.foos, foo)
+	s.fooBars.bars = append(s.fooBars.bars, bar)
 
 	return id
 }
