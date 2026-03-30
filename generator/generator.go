@@ -5,6 +5,10 @@ import (
 	"go/token"
 	"path"
 	"reflect"
+	"slices"
+	"strconv"
+
+	"github.com/rustedturnip/fes/set"
 )
 
 func isValidIdentifier(id string) bool {
@@ -19,49 +23,66 @@ func isValidIdentifier(id string) bool {
 	return true
 }
 
+type ComponentID int
+
+type pkg struct {
+	Path  string
+	Name  string
+	Alias string
+}
+
 type component struct {
-	pkg  string
-	typ  string
-	name string
+	Pkg  string
+	Typ  string
+	Name string
 }
 
 type archetype struct {
-	name       string
-	components map[component]any
+	Name       string
+	Components []ComponentID
+}
+
+type archetypeAlias struct {
+	Name        string
+	ArchetypeID int
+
+	// Components is the list of components provided to the alias. This is
+	// tracked separately to the components in the archetype aliased by this in
+	// case the components were provided in a different order.
+	Components []ComponentID
 }
 
 func (c component) component() component {
 	return c
 }
 
-type Component interface {
-	component() component
-}
-
 type Generator struct {
-	packages map[string]int
+	packages map[string]pkg
 
 	// TODO comment
-	componentsByName map[string]any
-
-	// TODO comment
-	components map[component]any
-
-	// TODO comment
-	archetypeAliases map[string]map[string]any
+	components []component
 
 	// TODO comment
 	// example: FooBar: Foo{}:struct{}{}, Bar{}:struct{}{},
-	archetypes map[string]archetype
+	archetypes []archetype
 
-	// archetypeGraph contains each archetype as a key, and then the set of
-	// archetypes that it is a subset of as the value.
-	archetypeGraph map[string]map[string]any
+	// TODO comment
+	archetypeAliases []archetypeAlias
+
+	// archetypeGraph tracks the subtypes of each archetype. It can be thought
+	// of as a map, where the index is the ID of the archetype, and the slice
+	// value contains a list of that archetypes subtypes.
+	archetypeGraph [][]int
 }
 
-func RegisterComponent[T any](g *Generator, name string) Component {
-	_, ok := g.componentsByName[name]
-	if ok {
+func RegisterComponent[T any](g *Generator, name string) ComponentID {
+	exists := slices.ContainsFunc(
+		g.components,
+		func(c component) bool {
+			return name == c.Name
+		},
+	)
+	if exists {
 		panic(
 			fmt.Errorf(
 				"component with the name %s already exists",
@@ -74,24 +95,26 @@ func RegisterComponent[T any](g *Generator, name string) Component {
 	rt := reflect.TypeOf(t)
 
 	c := component{
-		pkg:  rt.PkgPath(),
-		typ:  rt.String(),
-		name: name,
+		Pkg:  rt.PkgPath(),
+		Typ:  rt.String(),
+		Name: name,
 	}
 
-	g.trackPackage(c.pkg)
-	g.components[c] = struct{}{}
+	id := ComponentID(len(g.components))
 
-	return c
+	g.trackPackage(c.Pkg)
+	g.components = append(g.components, c)
+
+	return id
 }
 
-func (g *Generator) trackPackage(pkg string) {
-	_, ok := g.packages[pkg]
+func (g *Generator) trackPackage(np string) {
+	_, ok := g.packages[np]
 	if ok {
 		return
 	}
 
-	pb := path.Base(pkg)
+	pb := path.Base(np)
 
 	count := 0
 
@@ -103,10 +126,19 @@ func (g *Generator) trackPackage(pkg string) {
 		count++
 	}
 
-	g.packages[pkg] = count
+	alias := ""
+	if count > 0 {
+		alias = path.Base(np) + strconv.Itoa(count)
+	}
+
+	g.packages[np] = pkg{
+		Path:  np,
+		Name:  path.Base(np),
+		Alias: alias,
+	}
 }
 
-func RegisterArchetype(g *Generator, name string, components ...Component) {
+func RegisterArchetype(g *Generator, name string, components ...ComponentID) {
 	if !isValidIdentifier(name) {
 		panic(
 			fmt.Errorf(
@@ -117,9 +149,24 @@ func RegisterArchetype(g *Generator, name string, components ...Component) {
 		)
 	}
 
-	_, asArchetype := g.archetypes[name]
-	_, asArchetypeAlias := g.archetypeAliases[name]
-	if asArchetype || asArchetypeAlias {
+	if !set.IsSet(components) {
+		panic("duplicate components provided")
+	}
+
+	exists := slices.ContainsFunc(
+		g.archetypes,
+		func(a archetype) bool {
+			return name == a.Name
+		},
+	)
+
+	exists = exists || slices.ContainsFunc(
+		g.archetypeAliases,
+		func(alias archetypeAlias) bool {
+			return name == alias.Name
+		},
+	)
+	if exists {
 		panic(
 			fmt.Errorf(
 				"archetype with name %s already registered",
@@ -129,89 +176,66 @@ func RegisterArchetype(g *Generator, name string, components ...Component) {
 	}
 
 	at := archetype{
-		name:       name,
-		components: map[component]any{},
+		Name:       name,
+		Components: components,
 	}
 
-	for _, c := range components {
-		at.components[c.component()] = struct{}{}
-	}
-
-	if len(at.components) != len(components) {
-		panic(
-			fmt.Errorf(
-				"duplicate component provided to %s archetype",
-				name,
-			),
-		)
-	}
-
-	// track archetype (or alias if archetype already exists under a different
-	// name)
-aliases:
-	for _, atype := range g.archetypes {
-		if len(at.components) != len(atype.components) {
+	// aliases
+	for id, a := range g.archetypes {
+		if !set.AreEqual(components, a.Components) {
 			continue
 		}
-		for cmp, _ := range at.components {
-			_, ok := atype.components[cmp]
-			if !ok {
-				continue aliases
-			}
-		}
 
-		// found to be an alias of existing archetype
-		g.archetypeAliases[atype.name][name] = struct{}{}
+		g.archetypeAliases = append(g.archetypeAliases, archetypeAlias{
+			Name:        name,
+			ArchetypeID: id,
+			Components:  components,
+		})
 
-		// exit early as the archetype that this one is an alias of has already
-		// been processed so no further steps required
+		// if it's an alias, then it as a subtype is handled by the archetype
+		// it is an alias of, so return early
 		return
 	}
 
-	// check which (if any) archetypes are a subtype of this one (or vice versa)
-subtypes:
-	for _, atype := range g.archetypes {
-		// as already handled, if same length here, then one cannot be subtype
-		// of the other
-		if len(at.components) == len(atype.components) {
+	i := len(g.archetypes)
+	g.archetypes = append(g.archetypes, at)
+	g.archetypeGraph = append(g.archetypeGraph, nil)
+
+	// subtypes
+	for j := range len(g.archetypes) - 1 {
+		// as aliases are already handled, if same length here then one cannot
+		// be subtype of the other
+		if len(g.archetypes[i].Components) == len(g.archetypes[j].Components) {
 			continue
 		}
 
-		a, b := atype, at
+		if set.IsSubset(
+			g.archetypes[i].Components,
+			g.archetypes[j].Components,
+		) {
+			g.archetypeGraph[j] = append(g.archetypeGraph[j], i)
 
-		if len(a.components) > len(components) {
-			a, b = b, a
+			continue
 		}
 
-		for k := range a.components {
-			_, ok := b.components[k]
-			if !ok {
-				continue subtypes
-			}
+		if set.IsSubset(
+			g.archetypes[j].Components,
+			g.archetypes[i].Components,
+		) {
+			g.archetypeGraph[i] = append(g.archetypeGraph[i], j)
 		}
-
-		g.archetypeGraph[b.name][a.name] = struct{}{}
 	}
+}
+
+type templatePayload struct {
+	Package          string
+	Packages         map[string]pkg
+	Components       map[component]interface{}
+	Archetypes       map[string]archetype
+	ArchetypeAliases map[string]archetype
+	ArchetypeGraph   map[string]map[string]any
 }
 
 func (g *Generator) Build(loc, pkgName string) {
 	// TODO implement
-}
-
-func (g *Generator) buildImports() {
-	// package path: package alias
-	pkgs := map[string]string{}
-
-	for cmp := range g.components {
-		_, ok := pkgs[cmp.pkg]
-		if ok {
-			continue
-		}
-
-		for _, alias := range pkgs {
-			if path.Base(cmp.pkg) != alias {
-				pkgs[cmp.pkg] = alias
-			}
-		}
-	}
 }
