@@ -1,12 +1,12 @@
 package fes
 
 // types -- this is auto generated
-type archetypeID uint16
+type compositionID uint16
 
 const (
-	archetypeIDFooer archetypeID = iota
-	archetypeIDBarer
-	archetypeIDFooBarer
+	compositionIDFooer compositionID = iota
+	compositionIDBarer
+	compositionIDFooBarer
 )
 
 var (
@@ -66,15 +66,15 @@ var (
 )
 
 type entityKey struct {
-	archetype archetypeID
-	index     int
+	composition compositionID
+	index       int
 }
 
 // components -- these are referred to from schema
 type Foo int
 type Bar string
 
-// archetypes -- these are auto generated
+// compositions -- these are auto generated
 type storeFoo struct {
 	ids  []int
 	foos []Foo
@@ -254,8 +254,8 @@ func (s *Store) PutFoo(foo Foo) int {
 	id := len(s.ids)
 
 	s.ids = append(s.ids, &entityKey{
-		archetype: archetypeIDFooer,
-		index:     len(s.foos.ids),
+		composition: compositionIDFooer,
+		index:       len(s.foos.ids),
 	})
 
 	s.foos.ids = append(s.foos.ids, id)
@@ -268,8 +268,8 @@ func (s *Store) PutBar(bar Bar) int {
 	id := len(s.ids)
 
 	s.ids = append(s.ids, &entityKey{
-		archetype: archetypeIDBarer,
-		index:     len(s.bars.ids),
+		composition: compositionIDBarer,
+		index:       len(s.bars.ids),
 	})
 
 	s.bars.ids = append(s.bars.ids, id)
@@ -282,8 +282,8 @@ func (s *Store) PutFooBar(foo Foo, bar Bar) int {
 	id := len(s.ids)
 
 	s.ids = append(s.ids, &entityKey{
-		archetype: archetypeIDFooBarer,
-		index:     len(s.fooBars.ids),
+		composition: compositionIDFooBarer,
+		index:       len(s.fooBars.ids),
 	})
 
 	s.fooBars.ids = append(s.fooBars.ids, id)
@@ -296,5 +296,5 @@ func (s *Store) PutFooBar(foo Foo, bar Bar) int {
 func Delete(store *Store, id int) {
 	key := store.ids[id]
 
-	deleteFunctions[key.archetype](store, *key)
+	deleteFunctions[key.composition](store, *key)
 }

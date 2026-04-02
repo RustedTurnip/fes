@@ -37,18 +37,18 @@ type component struct {
 	Name string
 }
 
-type archetype struct {
+type composition struct {
 	Name       string
 	Components []ComponentID
 }
 
-type archetypeAlias struct {
-	Name        string
-	ArchetypeID int
+type compositionAlias struct {
+	Name          string
+	CompositionID int
 
 	// Components is the list of components provided to the alias. This is
-	// tracked separately to the components in the archetype aliased by this in
-	// case the components were provided in a different order.
+	// tracked separately to the components in the composition aliased by this
+	// in case the components were provided in a different order.
 	Components []ComponentID
 }
 
@@ -64,15 +64,15 @@ type Generator struct {
 
 	// TODO comment
 	// example: FooBar: Foo{}:struct{}{}, Bar{}:struct{}{},
-	archetypes []archetype
+	compositions []composition
 
 	// TODO comment
-	archetypeAliases []archetypeAlias
+	compositionAliases []compositionAlias
 
-	// archetypeGraph tracks the subtypes of each archetype. It can be thought
-	// of as a map, where the index is the ID of the archetype, and the slice
-	// value contains a list of that archetypes subtypes.
-	archetypeGraph [][]int
+	// compositionGraph tracks the subtypes of each composition. It can be
+	// thought of as a map, where the index is the ID of the composition, and
+	// the slice value contains a list of that compositions subtypes.
+	compositionGraph [][]int
 }
 
 func RegisterComponent[T any](g *Generator, name string) ComponentID {
@@ -138,12 +138,12 @@ func (g *Generator) trackPackage(np string) {
 	}
 }
 
-func RegisterArchetype(g *Generator, name string, components ...ComponentID) {
+func RegisterComposition(g *Generator, name string, components ...ComponentID) {
 	if !isValidIdentifier(name) {
 		panic(
 			fmt.Errorf(
-				"invalid name provided for archetype (must be valid Go "+
-					"identifier): %s",
+				"invalid name provided for composition (must be valid "+
+					"Go identifier): %s",
 				name,
 			),
 		)
@@ -154,86 +154,87 @@ func RegisterArchetype(g *Generator, name string, components ...ComponentID) {
 	}
 
 	exists := slices.ContainsFunc(
-		g.archetypes,
-		func(a archetype) bool {
-			return name == a.Name
+		g.compositions,
+		func(c composition) bool {
+			return name == c.Name
 		},
 	)
 
 	exists = exists || slices.ContainsFunc(
-		g.archetypeAliases,
-		func(alias archetypeAlias) bool {
-			return name == alias.Name
+		g.compositionAliases,
+		func(a compositionAlias) bool {
+			return name == a.Name
 		},
 	)
 	if exists {
 		panic(
 			fmt.Errorf(
-				"archetype with name %s already registered",
+				"composition with name %s already registered",
 				name,
 			),
 		)
 	}
 
-	at := archetype{
+	at := composition{
 		Name:       name,
 		Components: components,
 	}
 
 	// aliases
-	for id, a := range g.archetypes {
+	for id, a := range g.compositions {
 		if !set.AreEqual(components, a.Components) {
 			continue
 		}
 
-		g.archetypeAliases = append(g.archetypeAliases, archetypeAlias{
-			Name:        name,
-			ArchetypeID: id,
-			Components:  components,
+		g.compositionAliases = append(g.compositionAliases, compositionAlias{
+			Name:          name,
+			CompositionID: id,
+			Components:    components,
 		})
 
-		// if it's an alias, then it as a subtype is handled by the archetype
+		// if it's an alias, then it as a subtype is handled by the composition
 		// it is an alias of, so return early
 		return
 	}
 
-	i := len(g.archetypes)
-	g.archetypes = append(g.archetypes, at)
-	g.archetypeGraph = append(g.archetypeGraph, nil)
+	i := len(g.compositions)
+	g.compositions = append(g.compositions, at)
+	g.compositionGraph = append(g.compositionGraph, nil)
 
 	// subtypes
-	for j := range len(g.archetypes) - 1 {
+	for j := range len(g.compositions) - 1 {
 		// as aliases are already handled, if same length here then one cannot
 		// be subtype of the other
-		if len(g.archetypes[i].Components) == len(g.archetypes[j].Components) {
+		if len(g.compositions[i].Components) ==
+			len(g.compositions[j].Components) {
 			continue
 		}
 
 		if set.IsSubset(
-			g.archetypes[i].Components,
-			g.archetypes[j].Components,
+			g.compositions[i].Components,
+			g.compositions[j].Components,
 		) {
-			g.archetypeGraph[j] = append(g.archetypeGraph[j], i)
+			g.compositionGraph[j] = append(g.compositionGraph[j], i)
 
 			continue
 		}
 
 		if set.IsSubset(
-			g.archetypes[j].Components,
-			g.archetypes[i].Components,
+			g.compositions[j].Components,
+			g.compositions[i].Components,
 		) {
-			g.archetypeGraph[i] = append(g.archetypeGraph[i], j)
+			g.compositionGraph[i] = append(g.compositionGraph[i], j)
 		}
 	}
 }
 
 type templatePayload struct {
-	Package          string
-	Packages         map[string]pkg
-	Components       map[component]interface{}
-	Archetypes       map[string]archetype
-	ArchetypeAliases map[string]archetype
-	ArchetypeGraph   map[string]map[string]any
+	Package            string
+	Packages           map[string]pkg
+	Components         map[component]interface{}
+	Compositions       map[string]composition
+	CompositionAliases map[string]composition
+	CompositionGraph   map[string]map[string]any
 }
 
 func (g *Generator) Build(loc, pkgName string) {
