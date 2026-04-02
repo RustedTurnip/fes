@@ -14,8 +14,8 @@ import (
 type archetypeID uint64
 
 const (
-    {{range $name, $archetype := .Archetypes -}}
-        archetypeID{{$name}} archetypeID = iota{{/*TODO only iota on one*/}}
+    {{range $name, $cmps := .Compositions -}}
+        compositionID{{$name}} compositionID = iota{{/*TODO only iota on one*/}}
     {{end}}{{/*TODO fix whitespace here*/}}
 )
 
