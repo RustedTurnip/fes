@@ -23,7 +23,7 @@ func isValidIdentifier(id string) bool {
 	return true
 }
 
-type ComponentID int
+type ComponentID = int
 
 type pkg struct {
 	Path  string
@@ -32,14 +32,14 @@ type pkg struct {
 }
 
 type component struct {
-	Pkg  string
-	Typ  string
-	Name string
+	PkgID int
+	Type  string
+	Name  string
 }
 
 type composition struct {
 	Name       string
-	Components []ComponentID
+	Components []int
 }
 
 type compositionAlias struct {
@@ -49,7 +49,7 @@ type compositionAlias struct {
 	// Components is the list of components provided to the alias. This is
 	// tracked separately to the components in the composition aliased by this
 	// in case the components were provided in a different order.
-	Components []ComponentID
+	Components []int
 }
 
 func (c component) component() component {
@@ -57,7 +57,7 @@ func (c component) component() component {
 }
 
 type Generator struct {
-	packages map[string]pkg
+	packages []pkg
 
 	// TODO comment
 	components []component
@@ -94,32 +94,30 @@ func RegisterComponent[T any](g *Generator, name string) ComponentID {
 	var t T
 	rt := reflect.TypeOf(t)
 
+	pID := g.trackPackage(rt.PkgPath())
+
 	c := component{
-		Pkg:  rt.PkgPath(),
-		Typ:  rt.String(),
-		Name: name,
+		PkgID: pID,
+		Type:  rt.String(),
+		Name:  name,
 	}
 
-	id := ComponentID(len(g.components))
-
-	g.trackPackage(c.Pkg)
 	g.components = append(g.components, c)
 
-	return id
+	return len(g.components) - 1
 }
 
-func (g *Generator) trackPackage(np string) {
-	_, ok := g.packages[np]
-	if ok {
-		return
-	}
-
-	pb := path.Base(np)
+func (g *Generator) trackPackage(p string) int {
+	base := path.Base(p)
 
 	count := 0
 
-	for p := range g.packages {
-		if path.Base(p) != pb {
+	for i := range g.packages {
+		if g.packages[i].Path == p {
+			return i
+		}
+
+		if path.Base(g.packages[i].Path) != base {
 			continue
 		}
 
@@ -128,14 +126,19 @@ func (g *Generator) trackPackage(np string) {
 
 	alias := ""
 	if count > 0 {
-		alias = path.Base(np) + strconv.Itoa(count)
+		alias = path.Base(base) + strconv.Itoa(count)
 	}
 
-	g.packages[np] = pkg{
-		Path:  np,
-		Name:  path.Base(np),
-		Alias: alias,
-	}
+	g.packages = append(
+		g.packages,
+		pkg{
+			Path:  p,
+			Name:  base,
+			Alias: alias,
+		},
+	)
+
+	return len(g.packages) - 1
 }
 
 func RegisterComposition(g *Generator, name string, components ...ComponentID) {
