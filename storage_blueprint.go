@@ -14,56 +14,54 @@ var (
 	zeroBar Bar
 )
 
-var (
-	deleteFunctions = []func(store *Store, key entityKey){
-		// Foos
-		func(store *Store, key entityKey) {
-			deleted := store.foos.ids[key.index]
+var deleteFunctions = []func(store *Store, key entityKey){
+	// Foos
+	func(store *Store, key entityKey) {
+		deleted := store.foos.ids[key.index]
 
-			store.foos.ids[key.index] = store.foos.ids[len(store.foos.ids)-1]
-			store.foos.ids = store.foos.ids[:len(store.foos.ids)-1]
+		store.foos.ids[key.index] = store.foos.ids[len(store.foos.ids)-1]
+		store.foos.ids = store.foos.ids[:len(store.foos.ids)-1]
 
-			store.foos.foos[key.index] = store.foos.foos[len(store.foos.foos)-1]
-			store.foos.foos[len(store.foos.foos)-1] = zeroFoo // this line prevents memory leak of any underlying pointer values in Fooer (until next append)
-			store.foos.foos = store.foos.foos[:len(store.foos.foos)-1]
+		store.foos.foos[key.index] = store.foos.foos[len(store.foos.foos)-1]
+		store.foos.foos[len(store.foos.foos)-1] = zeroFoo // this line prevents memory leak of any underlying pointer values in Fooer (until next append)
+		store.foos.foos = store.foos.foos[:len(store.foos.foos)-1]
 
-			store.ids[deleted] = nil
-			store.ids[store.foos.ids[key.index]].index = key.index
-		},
-		// Bars
-		func(store *Store, key entityKey) {
-			deleted := store.bars.ids[key.index]
+		store.ids[deleted] = nil
+		store.ids[store.foos.ids[key.index]].index = key.index
+	},
+	// Bars
+	func(store *Store, key entityKey) {
+		deleted := store.bars.ids[key.index]
 
-			store.bars.ids[key.index] = store.bars.ids[len(store.bars.ids)-1]
-			store.bars.ids = store.bars.ids[:len(store.bars.ids)-1]
+		store.bars.ids[key.index] = store.bars.ids[len(store.bars.ids)-1]
+		store.bars.ids = store.bars.ids[:len(store.bars.ids)-1]
 
-			store.bars.bars[key.index] = store.bars.bars[len(store.bars.bars)-1]
-			store.bars.bars[len(store.bars.bars)-1] = zeroBar // this line prevents memory leak of any underlying pointer values in Fooer (until next append)
-			store.bars.bars = store.bars.bars[:len(store.bars.bars)-1]
+		store.bars.bars[key.index] = store.bars.bars[len(store.bars.bars)-1]
+		store.bars.bars[len(store.bars.bars)-1] = zeroBar // this line prevents memory leak of any underlying pointer values in Fooer (until next append)
+		store.bars.bars = store.bars.bars[:len(store.bars.bars)-1]
 
-			store.ids[deleted] = nil
-			store.ids[store.bars.ids[key.index]].index = key.index
-		},
-		// FooBars
-		func(store *Store, key entityKey) {
-			deleted := store.fooBars.ids[key.index]
+		store.ids[deleted] = nil
+		store.ids[store.bars.ids[key.index]].index = key.index
+	},
+	// FooBars
+	func(store *Store, key entityKey) {
+		deleted := store.fooBars.ids[key.index]
 
-			store.fooBars.ids[key.index] = store.fooBars.ids[len(store.fooBars.ids)-1]
-			store.fooBars.ids = store.fooBars.ids[:len(store.fooBars.ids)-1]
+		store.fooBars.ids[key.index] = store.fooBars.ids[len(store.fooBars.ids)-1]
+		store.fooBars.ids = store.fooBars.ids[:len(store.fooBars.ids)-1]
 
-			store.fooBars.foos[key.index] = store.fooBars.foos[len(store.fooBars.foos)-1]
-			store.fooBars.foos[len(store.fooBars.foos)-1] = zeroFoo // this line prevents memory leak of any underlying pointer values in Fooer (until next append)
-			store.fooBars.foos = store.fooBars.foos[:len(store.fooBars.foos)-1]
+		store.fooBars.foos[key.index] = store.fooBars.foos[len(store.fooBars.foos)-1]
+		store.fooBars.foos[len(store.fooBars.foos)-1] = zeroFoo // this line prevents memory leak of any underlying pointer values in Fooer (until next append)
+		store.fooBars.foos = store.fooBars.foos[:len(store.fooBars.foos)-1]
 
-			store.fooBars.bars[key.index] = store.fooBars.bars[len(store.fooBars.bars)-1]
-			store.fooBars.bars[len(store.fooBars.bars)-1] = zeroBar // this line prevents memory leak of any underlying pointer values in Fooer (until next append)
-			store.fooBars.bars = store.fooBars.bars[:len(store.fooBars.bars)-1]
+		store.fooBars.bars[key.index] = store.fooBars.bars[len(store.fooBars.bars)-1]
+		store.fooBars.bars[len(store.fooBars.bars)-1] = zeroBar // this line prevents memory leak of any underlying pointer values in Fooer (until next append)
+		store.fooBars.bars = store.fooBars.bars[:len(store.fooBars.bars)-1]
 
-			store.ids[deleted] = nil
-			store.ids[store.fooBars.ids[key.index]].index = key.index
-		},
-	}
-)
+		store.ids[deleted] = nil
+		store.ids[store.fooBars.ids[key.index]].index = key.index
+	},
+}
 
 type entityKey struct {
 	composition compositionID

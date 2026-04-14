@@ -3,6 +3,8 @@ package generator
 import (
 	"fmt"
 	"go/token"
+	"html/template"
+	"os"
 	"path"
 	"reflect"
 	"slices"
@@ -189,12 +191,48 @@ func RegisterComposition(g *Generator, name string, components ...ComponentID) {
 
 type templatePayload struct {
 	Package          string
-	Packages         map[string]pkg
-	Components       map[component]interface{}
-	Compositions     map[string]composition
-	CompositionGraph map[string]map[string]any
+	Packages         []pkg
+	Components       []component
+	Compositions     []composition
+	CompositionGraph [][]int
 }
 
 func (g *Generator) Build(loc, pkgName string) {
-	// TODO implement
+	// TODO make output.tmpl built into lib (maybe as variable)
+	tmpl, err := template.
+		New("output.tmpl").
+		Funcs(
+			template.FuncMap{
+				"packageAlias": func(p pkg) string {
+					if p.Alias != "" {
+						return p.Alias
+					}
+
+					return path.Base(p.Path)
+				},
+			},
+		).
+		ParseFiles("output.tmpl") // TODO better way to provide templ
+	if err != nil {
+		panic(err) // TODO wrap error
+	}
+
+	fo, err := os.Create(loc)
+	if err != nil {
+		panic(err) // TODO wrap error
+	}
+
+	err = tmpl.Execute(
+		fo,
+		templatePayload{
+			Package:          pkgName,
+			Packages:         g.packages,
+			Components:       g.components,
+			Compositions:     g.compositions,
+			CompositionGraph: g.compositionGraph,
+		},
+	)
+	if err != nil {
+		panic(err) // TODO wrap error
+	}
 }
