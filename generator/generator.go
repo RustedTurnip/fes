@@ -3,12 +3,13 @@ package generator
 import (
 	"fmt"
 	"go/token"
-	"html/template"
 	"os"
 	"path"
 	"reflect"
 	"slices"
 	"strconv"
+	"strings"
+	"text/template"
 
 	"github.com/rustedturnip/fes/set"
 )
@@ -68,7 +69,7 @@ func RegisterComponent[T any](g *Generator, name string) ComponentID {
 	exists := slices.ContainsFunc(
 		g.components,
 		func(c component) bool {
-			return name == c.Name
+			return strings.EqualFold(name, c.Name)
 		},
 	)
 	if exists {
@@ -148,7 +149,7 @@ func RegisterComposition(g *Generator, name string, components ...ComponentID) {
 	exists := slices.ContainsFunc(
 		g.compositions,
 		func(c composition) bool {
-			return name == c.Name
+			return strings.EqualFold(name, c.Name)
 		},
 	)
 	if exists {
@@ -189,29 +190,10 @@ func RegisterComposition(g *Generator, name string, components ...ComponentID) {
 	}
 }
 
-type templatePayload struct {
-	Package          string
-	Packages         []pkg
-	Components       []component
-	Compositions     []composition
-	CompositionGraph [][]int
-}
-
 func (g *Generator) Build(loc, pkgName string) {
 	// TODO make output.tmpl built into lib (maybe as variable)
 	tmpl, err := template.
 		New("output.tmpl").
-		Funcs(
-			template.FuncMap{
-				"packageAlias": func(p pkg) string {
-					if p.Alias != "" {
-						return p.Alias
-					}
-
-					return path.Base(p.Path)
-				},
-			},
-		).
 		ParseFiles("output.tmpl") // TODO better way to provide templ
 	if err != nil {
 		panic(err) // TODO wrap error
@@ -222,17 +204,116 @@ func (g *Generator) Build(loc, pkgName string) {
 		panic(err) // TODO wrap error
 	}
 
+	payload := newTemplatePayload{
+		Package: pkgName,
+	}
+
+	for _, p := range g.packages {
+		v := `"` + p.Path + `"`
+		if p.Alias != "" {
+			v = p.Alias + " " + v
+		}
+
+		payload.Imports = append(
+			payload.Imports,
+			v,
+		)
+	}
+
+	for _, c := range g.components {
+		pkgAlias := g.packages[c.PkgID].Alias
+
+		if pkgAlias == "" {
+			pkgAlias = path.Base(g.packages[c.PkgID].Path)
+		}
+
+		payload.Components = append(
+			payload.Components,
+			tmplComponent{
+				UpperName: toUpper(c.Name),
+				LowerName: toLower(c.Name),
+				Type:      pkgAlias + "." + c.Name,
+			},
+		)
+	}
+
+	// TODO tody up this - maybe refactor nested tmplCompositions in
+	//  tmplCompositions
+	for i, c := range g.compositions {
+		cnts := make([]tmplComponent, 0, len(c.Components))
+
+		for _, id := range c.Components {
+			cnts = append(cnts, payload.Components[id])
+		}
+
+		compatibles := make([]tmplComposition, 0, len(g.compositionGraph[i]))
+
+		for _, id := range g.compositionGraph[i] {
+			csn := g.compositions[id]
+
+			compatibles = append(
+				compatibles,
+				tmplComposition{
+					UpperName:  toUpper(csn.Name),
+					LowerName:  toLower(csn.Name),
+					Components: cnts,
+				},
+			)
+		}
+
+		payload.Compositions = append(
+			payload.Compositions,
+			tmplComposition{
+				UpperName:   toUpper(c.Name),
+				LowerName:   toLower(c.Name),
+				Components:  cnts,
+				Compatibles: compatibles,
+			},
+		)
+	}
+
 	err = tmpl.Execute(
 		fo,
-		templatePayload{
-			Package:          pkgName,
-			Packages:         g.packages,
-			Components:       g.components,
-			Compositions:     g.compositions,
-			CompositionGraph: g.compositionGraph,
-		},
+		payload,
 	)
 	if err != nil {
 		panic(err) // TODO wrap error
 	}
+}
+
+func toUpper(s string) string {
+	if s == "" {
+		return s
+	}
+
+	return strings.ToUpper(s[:1]) + s[1:]
+}
+
+func toLower(s string) string {
+	if s == "" {
+		return s
+	}
+
+	pos := 0
+
+	for i := range s {
+		if s[i] < 66 || s[i] > 90 {
+			break
+		}
+
+		pos = i
+	}
+
+	if pos == len(s)-1 {
+		return strings.ToLower(s)
+	}
+
+	// if first character is last sequential uppercase, then the first char must
+	// be made to be lower (Foo -> Foo) so artificially shift pos to account for
+	// this
+	if pos == 0 {
+		pos++
+	}
+
+	return strings.ToLower(s[:pos]) + s[pos:]
 }

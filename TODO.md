@@ -13,5 +13,7 @@
 - [x] Move to a Structure of Arrays (SoA) approach later on (where each
       component of each archetype is in its own array to make the most of the
       CPU cache).
+- [ ] Find a way to prevent adding imports for types declared in the same
+      package as the output file.
 - [ ] Investigate using generic methods when they are available (see
       [here](https://github.com/golang/go/issues/77273))
