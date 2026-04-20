@@ -101,7 +101,7 @@ var deleteFunctions = []func(store *Store, key entityKey){
 {{- range $csn := .Compositions}}
 func (s *Store) {{$csn.UpperName}}ByID(id int) (
     {{- range $csn.Components}}
-    *{{.Type}},
+    {{.LowerName}} *{{.Type}},
     {{- end}}
 ){
     index := s.ids[id]
