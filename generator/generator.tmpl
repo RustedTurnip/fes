@@ -30,7 +30,7 @@ type entityKey struct {
 type store{{.UpperName}} struct {
     ids []int
     {{- range .Components}}
-    {{.LowerName}}s {{.Type}}
+    {{.LowerName}}s []{{.Type}}
     {{- end}}
 }
 
@@ -82,7 +82,7 @@ var deleteFunctions = []func(store *Store, key entityKey){
         deleted := store.{{$subStore}}.ids[key.index]
 
         store.{{$subStore}}.ids[key.index] = store.{{$subStore}}.ids[len(store.{{$subStore}}.ids)-1]
-		store.{{$subStore}}.ids = store.{{$subStore}}.ids[:len(store.{{$subStore}}s.ids)-1]
+		store.{{$subStore}}.ids = store.{{$subStore}}.ids[:len(store.{{$subStore}}.ids)-1]
 
 		{{- range .Components}}
 
@@ -105,12 +105,12 @@ func (s *Store) {{$csn.UpperName}}ByID(id int) (
     {{.LowerName}} *{{.Type}},
     {{- end}}
 ){
-    index := s.ids[id]
+    key := s.ids[id]
 
     return {{range $i, $cnt := $csn.Components -}}
     {{- if $i}},
         {{end -}}
-    s.{{$csn.LowerName}}s.{{$cnt.LowerName}}s[id]
+    s.{{$csn.LowerName}}s.{{$cnt.LowerName}}s[key.index]
     {{- end}}
 }
 
@@ -153,6 +153,8 @@ func (s *Store) Put{{$csn.UpperName}}(
         c{{.UpperName}},
     )
     {{- end}}
+
+    return id
 }
 {{end}}
 func Delete(store *Store, id int) {
