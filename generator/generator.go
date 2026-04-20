@@ -1,8 +1,10 @@
 package generator
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
+	"go/format"
 	"go/token"
 	"io"
 	"os"
@@ -324,12 +326,34 @@ func (g *Generator) Build() {
 		)
 	}
 
+	buf := &bytes.Buffer{}
+
 	err = tmpl.Execute(
-		fo,
+		buf,
 		payload,
 	)
 	if err != nil {
 		panic(err) // TODO wrap error
+	}
+
+	result, err := format.Source(buf.Bytes())
+	if err != nil {
+		panic(
+			fmt.Errorf(
+				"failed to format output: %w",
+				err,
+			),
+		)
+	}
+
+	_, err = fo.Write(result)
+	if err != nil {
+		panic(
+			fmt.Errorf(
+				"failed to write output: %w",
+				err,
+			),
+		)
 	}
 }
 

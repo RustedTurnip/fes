@@ -113,7 +113,7 @@ func (s *Store) {{$csn.UpperName}}ByID(id int) (
     {{- end}}
 }
 
-func (s *Store) {{$csn.UpperName}}s *{{$csn.UpperName}}Accessor {
+func (s *Store) {{$csn.UpperName}}s() *{{$csn.UpperName}}Accessor {
     return &{{$csn.UpperName}}Accessor{
         current: 0,
         ids: [][]int{
@@ -121,7 +121,7 @@ func (s *Store) {{$csn.UpperName}}s *{{$csn.UpperName}}Accessor {
             {{- range $csn.Compatibles}}
             s.{{.LowerName}}s.ids,
             {{- end}}
-        }
+        },
         {{- range $cnt := $csn.Components}}
         slices{{$cnt.UpperName}}: [][]{{.Type}}{
             s.{{$csn.LowerName}}s.{{$cnt.LowerName}}s,
