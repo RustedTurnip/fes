@@ -231,10 +231,9 @@ func RegisterComposition(g *Generator, name string, components ...ComponentID) {
 }
 
 func (g *Generator) Build() {
-	// TODO make output.tmpl built into lib (maybe as variable)
 	tmpl, err := template.
-		New("output.tmpl").
-		ParseFiles("output.tmpl") // TODO better way to provide templ
+		New("generator").
+		Parse(fesTmpl)
 	if err != nil {
 		panic(err) // TODO wrap error
 	}

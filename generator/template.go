@@ -1,5 +1,12 @@
 package generator
 
+import (
+	_ "embed"
+)
+
+//go:embed generator.tmpl
+var fesTmpl string
+
 type tmplComponent struct {
 	// UpperName is the user-provided name of the component, but with the first
 	// character capitalised.
