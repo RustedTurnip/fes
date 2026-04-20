@@ -416,9 +416,15 @@ func destinationPackage(dir string) (pkg, error) {
 	}
 
 	if pkgs[0].PkgPath != "" {
+		name := pkgs[0].Name
+
+		if name == "" {
+			name = path.Base(pkgs[0].PkgPath)
+		}
+
 		return pkg{
 			Path: pkgs[0].PkgPath,
-			Name: pkgs[0].Name,
+			Name: name,
 		}, nil
 	}
 
