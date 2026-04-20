@@ -1,8 +1,10 @@
 package generator
 
 import (
+	"errors"
 	"fmt"
 	"go/token"
+	"io"
 	"os"
 	"path"
 	"reflect"
@@ -12,6 +14,8 @@ import (
 	"text/template"
 
 	"github.com/rustedturnip/fes/set"
+	"golang.org/x/mod/modfile"
+	"golang.org/x/tools/go/packages"
 )
 
 func isValidIdentifier(id string) bool {
@@ -29,9 +33,8 @@ func isValidIdentifier(id string) bool {
 type ComponentID = int
 
 type pkg struct {
-	Path  string
-	Name  string
-	Alias string
+	Path string
+	Name string
 }
 
 type component struct {
@@ -50,6 +53,8 @@ func (c component) component() component {
 }
 
 type Generator struct {
+	destination string
+
 	packages []pkg
 
 	// TODO comment
@@ -63,6 +68,12 @@ type Generator struct {
 	// thought of as a map, where the index is the ID of the composition, and
 	// the slice value contains a list of that compositions subtypes.
 	compositionGraph [][]int
+}
+
+func New(d string) *Generator {
+	return &Generator{
+		destination: d,
+	}
 }
 
 func RegisterComponent[T any](g *Generator, name string) ComponentID {
@@ -84,7 +95,7 @@ func RegisterComponent[T any](g *Generator, name string) ComponentID {
 	var t T
 	rt := reflect.TypeOf(t)
 
-	pID := g.trackPackage(rt.PkgPath())
+	pID := g.registerPackage(rt.PkgPath())
 
 	c := component{
 		PkgID: pID,
@@ -97,38 +108,65 @@ func RegisterComponent[T any](g *Generator, name string) ComponentID {
 	return len(g.components) - 1
 }
 
-func (g *Generator) trackPackage(p string) int {
-	base := path.Base(p)
-
-	count := 0
-
+// TODO comment
+func (g *Generator) registerPackage(imp string) int {
 	for i := range g.packages {
-		if g.packages[i].Path == p {
-			return i
-		}
-
-		if path.Base(g.packages[i].Path) != base {
+		if g.packages[i].Path != imp {
 			continue
 		}
 
-		count++
+		return i
 	}
 
-	alias := ""
-	if count > 0 {
-		alias = path.Base(base) + strconv.Itoa(count)
-	}
+	dst, _ := path.Split(g.destination)
 
-	g.packages = append(
-		g.packages,
-		pkg{
-			Path:  p,
-			Name:  base,
-			Alias: alias,
+	rp, err := packages.Load(
+		&packages.Config{
+			Mode: packages.NeedName,
+			Dir:  dst,
 		},
+		imp,
 	)
+	if err != nil {
+		panic(
+			fmt.Errorf(
+				"failed to load package %s: %w",
+				imp,
+				err,
+			),
+		)
+	}
+	if len(rp) != 1 {
+		panic(
+			fmt.Errorf(
+				"unexpected number of packages returned for %s (%d)",
+				imp,
+				len(rp),
+			),
+		)
+	}
 
-	return len(g.packages) - 1
+	n := rp[0].Name
+	c := 0
+
+	for i := range g.packages {
+		if n != g.packages[i].Name {
+			continue
+		}
+
+		c++
+
+		n = rp[0].Name + strconv.Itoa(c)
+	}
+
+	id := len(g.packages)
+
+	g.packages = append(g.packages, pkg{
+		Path: imp,
+		Name: n,
+	})
+
+	return id
 }
 
 func RegisterComposition(g *Generator, name string, components ...ComponentID) {
@@ -190,7 +228,7 @@ func RegisterComposition(g *Generator, name string, components ...ComponentID) {
 	}
 }
 
-func (g *Generator) Build(loc, pkgName string) {
+func (g *Generator) Build() {
 	// TODO make output.tmpl built into lib (maybe as variable)
 	tmpl, err := template.
 		New("output.tmpl").
@@ -199,19 +237,33 @@ func (g *Generator) Build(loc, pkgName string) {
 		panic(err) // TODO wrap error
 	}
 
-	fo, err := os.Create(loc)
+	fo, err := os.Create(g.destination)
 	if err != nil {
 		panic(err) // TODO wrap error
 	}
+	defer func() {
+		_ = fo.Close()
+	}()
+
+	dir, _ := path.Split(g.destination)
+
+	dst, err := destinationPackage(dir)
+	if err != nil {
+		panic(err) // TODO handle/wrap error?
+	}
 
 	payload := newTemplatePayload{
-		Package: pkgName,
+		Package: dst.Name,
 	}
 
 	for _, p := range g.packages {
+		if dst.Path == p.Path {
+			continue
+		}
+
 		v := `"` + p.Path + `"`
-		if p.Alias != "" {
-			v = p.Alias + " " + v
+		if p.Name != path.Base(p.Path) {
+			v = p.Name + " " + v
 		}
 
 		payload.Imports = append(
@@ -221,10 +273,10 @@ func (g *Generator) Build(loc, pkgName string) {
 	}
 
 	for _, c := range g.components {
-		pkgAlias := g.packages[c.PkgID].Alias
+		t := c.Name
 
-		if pkgAlias == "" {
-			pkgAlias = path.Base(g.packages[c.PkgID].Path)
+		if g.packages[c.PkgID].Path != dst.Path {
+			t = g.packages[c.PkgID].Name + "." + c.Name
 		}
 
 		payload.Components = append(
@@ -232,7 +284,7 @@ func (g *Generator) Build(loc, pkgName string) {
 			tmplComponent{
 				UpperName: toUpper(c.Name),
 				LowerName: toLower(c.Name),
-				Type:      pkgAlias + "." + c.Name,
+				Type:      t,
 			},
 		)
 	}
@@ -316,4 +368,95 @@ func toLower(s string) string {
 	}
 
 	return strings.ToLower(s[:pos]) + s[pos:]
+}
+
+func destinationPackage(dir string) (pkg, error) {
+	pkgs, err := packages.Load(
+		&packages.Config{
+			Mode: packages.NeedName | packages.NeedFiles,
+			Dir:  dir,
+		},
+		dir,
+	)
+	if err != nil {
+		return pkg{}, fmt.Errorf(
+			"failed to load package info: %w",
+			err,
+		)
+	}
+
+	if len(pkgs) != 1 {
+		return pkg{}, fmt.Errorf(
+			"unexpected number of packages found (%d)",
+			len(pkgs),
+		)
+	}
+
+	if pkgs[0].PkgPath != "" {
+		return pkg{
+			Path: pkgs[0].PkgPath,
+			Name: pkgs[0].Name,
+		}, nil
+	}
+
+	mod := dir
+
+	for {
+		_, err = os.Stat(path.Join(mod, "go.mod"))
+		if err == os.ErrNotExist {
+			if mod == "" {
+				return pkg{}, errors.New(
+					"unable to locate package info for destination",
+				)
+			}
+
+			mod, _ = path.Split(mod)
+
+			continue
+		}
+		if err != nil {
+			return pkg{}, fmt.Errorf(
+				"unexpected error when locating go.mod: %s",
+				err,
+			)
+		}
+
+		break
+	}
+
+	rel := strings.TrimPrefix(dir, mod)
+	mod = path.Join(mod, "go.mod")
+
+	fi, err := os.Open(mod)
+	if err != nil {
+		return pkg{}, fmt.Errorf(
+			"failed to open go.mod to determine package: %w",
+			err,
+		)
+	}
+
+	defer func() {
+		_ = fi.Close()
+	}()
+
+	b, err := io.ReadAll(fi)
+	if err != nil {
+		return pkg{}, fmt.Errorf(
+			"failed to read go.mod when determining package info: %w",
+			err,
+		)
+	}
+
+	module := modfile.ModulePath(b)
+	if module == "" {
+		return pkg{}, fmt.Errorf(
+			"failed to parse go.mod (%s) when determining package info",
+			mod,
+		)
+	}
+
+	return pkg{
+		Path: path.Join(module, rel),
+		Name: path.Base(rel),
+	}, nil
 }
