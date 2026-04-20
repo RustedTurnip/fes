@@ -11,7 +11,8 @@ type compositionID uint64
 
 const (
 {{- range $index, $c := .Compositions}}
-    compositionID{{$c.UpperName}} compositionID = {{$index}}
+    compositionID{{$c.UpperName}}
+    {{- if not $index}} compositionID = iota{{end}}
 {{- end}}
 )
 
