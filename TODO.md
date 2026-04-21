@@ -8,8 +8,8 @@
 - [x] Find a way to prevent adding imports for types declared in the same
       package as the output file.
   - [x] Use Pkg.Name rather than path.Base(Pkg.Path) when building packages.
-- [ ] Add version number.
-- [ ] Add auto-generated header to output (including fes version).
+- [x] Add version number.
+- [x] Add auto-generated header to output (including fes version).
 - [ ] Make Build() method return an error rather than rely on panics throughout
       code.
 - [ ] Address remaining TODOs.

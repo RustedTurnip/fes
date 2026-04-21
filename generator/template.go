@@ -40,6 +40,7 @@ type tmplComposition struct {
 }
 
 type newTemplatePayload struct {
+	Version      string
 	Package      string
 	Imports      []string
 	Components   []tmplComponent

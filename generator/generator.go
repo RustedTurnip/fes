@@ -20,6 +20,8 @@ import (
 	"golang.org/x/tools/go/packages"
 )
 
+const version = "v0.1.0-dev"
+
 func isValidIdentifier(id string) bool {
 	if !token.IsIdentifier(id) {
 		return false
@@ -254,6 +256,7 @@ func (g *Generator) Build() {
 	}
 
 	payload := newTemplatePayload{
+		Version: version,
 		Package: dst.Name,
 	}
 
