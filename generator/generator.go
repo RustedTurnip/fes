@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"go/format"
 	"go/token"
 	"io"
 	"os"
@@ -18,6 +17,7 @@ import (
 	"github.com/rustedturnip/fes/set"
 	"golang.org/x/mod/modfile"
 	"golang.org/x/tools/go/packages"
+	"golang.org/x/tools/imports"
 )
 
 const version = "v0.1.0-dev"
@@ -338,7 +338,9 @@ func (g *Generator) Build() {
 		panic(err) // TODO wrap error
 	}
 
-	result, err := format.Source(buf.Bytes())
+	// imports.Process implicitly runs gofmt, but has better import formatting
+	// rules so has been favoured here
+	result, err := imports.Process(g.destination, buf.Bytes(), nil)
 	if err != nil {
 		panic(
 			fmt.Errorf(
