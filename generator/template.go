@@ -36,7 +36,7 @@ type tmplComposition struct {
 	Components []tmplComponent
 
 	// TODO comment
-	Compatibles []tmplComposition
+	Compatibles []*tmplComposition
 }
 
 type newTemplatePayload struct {

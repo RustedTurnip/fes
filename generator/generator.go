@@ -56,16 +56,21 @@ func (c component) component() component {
 	return c
 }
 
+// Generator is used to generate the desired entity storage object. It should be
+// instantiated using New.
 type Generator struct {
+	// destination is the path to the output file as specified by the user.
 	destination string
 
+	// packages is a registry of unique imports that are used by the provided
+	// components.
 	packages []pkg
 
-	// TODO comment
+	// components is a list of unique components provided to the Generator by
+	// the user. These components are used to construct compositions.
 	components []component
 
-	// TODO comment
-	// example: FooBar: Foo{}:struct{}{}, Bar{}:struct{}{},
+	// compositions is a list of unique compositions provided by the user.
 	compositions []composition
 
 	// compositionGraph tracks the subtypes of each composition. It can be
@@ -74,12 +79,17 @@ type Generator struct {
 	compositionGraph [][]int
 }
 
-func New(d string) *Generator {
+// New instantiates a new Generator configured with the desired output location
+// provided as dst which should be the path to the desired output file.
+func New(dst string) *Generator {
 	return &Generator{
-		destination: d,
+		destination: dst,
 	}
 }
 
+// RegisterComponent registers a new component (for later use in the definition
+// of a composition) of type T and the provided name. The component is
+// registered to the provided Generator g.
 func RegisterComponent[T any](g *Generator, name string) (ComponentID, error) {
 	exists := slices.ContainsFunc(
 		g.components,
@@ -116,6 +126,12 @@ func RegisterComponent[T any](g *Generator, name string) (ComponentID, error) {
 	return len(g.components) - 1, nil
 }
 
+// MustRegisterComponent registers a new component (for later use in the
+// definition of a composition) of type T and the provided name. The component
+// is registered to the provided Generator g.
+//
+// If an error is encountered, a panic occurs rather than an error being
+// returned. See RegisterComponent if this isn't desired.
 func MustRegisterComponent[T any](g *Generator, name string) ComponentID {
 	id, err := RegisterComponent[T](g, name)
 	if err != nil {
@@ -130,7 +146,15 @@ func MustRegisterComponent[T any](g *Generator, name string) ComponentID {
 	return id
 }
 
-// TODO comment
+// registerPackage will attempt to register the provided import (imp) as new
+// package in Generator, or return the ID of the matching, already registered,
+// import.
+//
+// registerPackage attempts to visit the package to learn what it's native name
+// is (as it may be different to the base of the path). As such, an error may
+// occur if the package can't be found (as it uses the destination as the
+// "location" context which may be a different project to where the tool is
+// being executed which may lead to such an error).
 func (g *Generator) registerPackage(imp string) (int, error) {
 	for i := range g.packages {
 		if g.packages[i].Path != imp {
@@ -187,6 +211,12 @@ func (g *Generator) registerPackage(imp string) (int, error) {
 	return id, nil
 }
 
+// RegisterComposition registers to the provided Generator a Composition which
+// is a set of components that make up an "entity type".
+//
+// The provided components must be unique to each other, and name must be unique
+// to the other components in a case-insensitive way. The name must also be a
+// valid Go identifier.
 func RegisterComposition(
 	g *Generator,
 	name string,
@@ -248,6 +278,15 @@ func RegisterComposition(
 	return nil
 }
 
+// RegisterComposition registers to the provided Generator a Composition which
+// is a set of components that make up an "entity type".
+//
+// The provided components must be unique to each other, and name must be unique
+// to the other components in a case-insensitive way. The name must also be a
+// valid Go identifier.
+//
+// If an error is encountered, a panic occurs rather than an error being
+// returned. See RegisterComposition if this isn't desired.
 func MustRegisterComposition(
 	g *Generator,
 	name string,
@@ -265,6 +304,7 @@ func MustRegisterComposition(
 	}
 }
 
+// Build generates the entity store at the preconfigured destination.
 func (g *Generator) Build() error {
 	tmpl, err := template.
 		New("generator").
@@ -335,28 +375,11 @@ func (g *Generator) Build() error {
 		)
 	}
 
-	// TODO tody up this - maybe refactor nested tmplCompositions in
-	//  tmplCompositions
-	for i, c := range g.compositions {
+	for _, c := range g.compositions {
 		cnts := make([]tmplComponent, 0, len(c.Components))
 
 		for _, id := range c.Components {
 			cnts = append(cnts, payload.Components[id])
-		}
-
-		compatibles := make([]tmplComposition, 0, len(g.compositionGraph[i]))
-
-		for _, id := range g.compositionGraph[i] {
-			csn := g.compositions[id]
-
-			compatibles = append(
-				compatibles,
-				tmplComposition{
-					UpperName:  toUpper(csn.Name),
-					LowerName:  toLower(csn.Name),
-					Components: cnts,
-				},
-			)
 		}
 
 		payload.Compositions = append(
@@ -365,9 +388,18 @@ func (g *Generator) Build() error {
 				UpperName:   toUpper(c.Name),
 				LowerName:   toLower(c.Name),
 				Components:  cnts,
-				Compatibles: compatibles,
+				Compatibles: nil, // built below
 			},
 		)
+	}
+
+	for i := range payload.Compositions {
+		for _, id := range g.compositionGraph[i] {
+			payload.Compositions[i].Compatibles = append(
+				payload.Compositions[i].Compatibles,
+				&payload.Compositions[id],
+			)
+		}
 	}
 
 	buf := &bytes.Buffer{}

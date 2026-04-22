@@ -12,9 +12,15 @@
 - [x] Add auto-generated header to output (including fes version).
 - [x] Make Build() method return an error rather than rely on panics throughout
       code.
-- [ ] Address remaining TODOs.
+- [x] Address remaining TODOs.
+- [x] Comment types, functions, and methods that would benefit.
+- [ ] General refactor, moving template related stuff into template.go.
+- [ ] Add config to Generator constructor so non-breaking options can be added
+      later.
+- [ ] When checking if the name of a component or composition is a valid 
+      identifier, we should check the Upper and Lower versions of the name 
+      instead of the name itself.
 - [ ] Add README.md.
-- [ ] Comment types, functions, and methods that would benefit.
 - [ ] Unit tests.
 
 ## Should do
