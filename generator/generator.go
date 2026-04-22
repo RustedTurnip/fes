@@ -138,6 +138,7 @@ func MustRegisterComponent[T any](g *Generator, name string) ComponentID {
 		panic(
 			fmt.Errorf(
 				`failed to register component "%s": %w`,
+				name,
 				err,
 			),
 		)
