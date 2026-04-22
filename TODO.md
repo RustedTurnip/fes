@@ -1,36 +1,38 @@
 # TODO
 
 ## Must do (first release)
+
 - [x] Create the shape the schema should take.
 - [x] Move to a Structure of Arrays (SoA) approach later on (where each
-      component of each archetype is in its own array to make the most of the
-      CPU cache).
+  component of each archetype is in its own array to make the most of the
+  CPU cache).
 - [x] Find a way to prevent adding imports for types declared in the same
-      package as the output file.
-  - [x] Use Pkg.Name rather than path.Base(Pkg.Path) when building packages.
+  package as the output file.
+    - [x] Use Pkg.Name rather than path.Base(Pkg.Path) when building packages.
 - [x] Add version number.
 - [x] Add auto-generated header to output (including fes version).
 - [x] Make Build() method return an error rather than rely on panics throughout
-      code.
+  code.
 - [x] Address remaining TODOs.
 - [x] Comment types, functions, and methods that would benefit.
 - [ ] General refactor, moving template related stuff into template.go.
 - [ ] Add config to Generator constructor so non-breaking options can be added
-      later.
-- [ ] When checking if the name of a component or composition is a valid 
-      identifier, we should check the Upper and Lower versions of the name 
-      instead of the name itself.
+  later.
+- [ ] When checking if the name of a component or composition is a valid
+  identifier, we should check the Upper and Lower versions of the name
+  instead of the name itself.
 - [ ] Add README.md.
 - [ ] Unit tests.
 
 ## Should do
+
 - [ ] Have a less performance-centric output option for convenience (using
-      structs instead of many return params).
+  structs instead of many return params).
 - [ ] Create a decision log to track memory/performance-based incentives for
-      design.
+  design.
 - [ ] Later on, add archetype namespacing to allow groupings to improve
-      intellisense usability - e.g. Physics archetypes could be aggregated in
-      such a group so that you can do: `store.Physics.PutFoo()` instead of
-      `store.PutFoo()`.
+  intellisense usability - e.g. Physics archetypes could be aggregated in
+  such a group so that you can do: `store.Physics.PutFoo()` instead of
+  `store.PutFoo()`.
 - [ ] Investigate using generic methods when they are available (see
-      [here](https://github.com/golang/go/issues/77273))
+  [here](https://github.com/golang/go/issues/77273))
