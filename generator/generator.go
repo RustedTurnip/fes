@@ -263,7 +263,7 @@ func RegisterComposition(
 			g.compositions[i].Components,
 			g.compositions[j].Components,
 		) {
-			g.compositionGraph[j] = append(g.compositionGraph[j], i)
+			g.compositionGraph[i] = append(g.compositionGraph[i], j)
 
 			continue
 		}
@@ -272,7 +272,7 @@ func RegisterComposition(
 			g.compositions[j].Components,
 			g.compositions[i].Components,
 		) {
-			g.compositionGraph[i] = append(g.compositionGraph[i], j)
+			g.compositionGraph[j] = append(g.compositionGraph[j], i)
 		}
 	}
 
