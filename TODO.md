@@ -10,7 +10,7 @@
   - [x] Use Pkg.Name rather than path.Base(Pkg.Path) when building packages.
 - [x] Add version number.
 - [x] Add auto-generated header to output (including fes version).
-- [ ] Make Build() method return an error rather than rely on panics throughout
+- [x] Make Build() method return an error rather than rely on panics throughout
       code.
 - [ ] Address remaining TODOs.
 - [ ] Add README.md.

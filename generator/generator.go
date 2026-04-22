@@ -80,7 +80,7 @@ func New(d string) *Generator {
 	}
 }
 
-func RegisterComponent[T any](g *Generator, name string) ComponentID {
+func RegisterComponent[T any](g *Generator, name string) (ComponentID, error) {
 	exists := slices.ContainsFunc(
 		g.components,
 		func(c component) bool {
@@ -88,18 +88,22 @@ func RegisterComponent[T any](g *Generator, name string) ComponentID {
 		},
 	)
 	if exists {
-		panic(
-			fmt.Errorf(
-				"component with the name %s already exists",
-				name,
-			),
+		return 0, fmt.Errorf(
+			"component with the name %s already exists",
+			name,
 		)
 	}
 
 	var t T
 	rt := reflect.TypeOf(t)
 
-	pID := g.registerPackage(rt.PkgPath())
+	pID, err := g.registerPackage(rt.PkgPath())
+	if err != nil {
+		return 0, fmt.Errorf(
+			"failed to register component's package: %w",
+			err,
+		)
+	}
 
 	c := component{
 		PkgID: pID,
@@ -109,17 +113,31 @@ func RegisterComponent[T any](g *Generator, name string) ComponentID {
 
 	g.components = append(g.components, c)
 
-	return len(g.components) - 1
+	return len(g.components) - 1, nil
+}
+
+func MustRegisterComponent[T any](g *Generator, name string) ComponentID {
+	id, err := RegisterComponent[T](g, name)
+	if err != nil {
+		panic(
+			fmt.Errorf(
+				`failed to register component "%s": %w`,
+				err,
+			),
+		)
+	}
+
+	return id
 }
 
 // TODO comment
-func (g *Generator) registerPackage(imp string) int {
+func (g *Generator) registerPackage(imp string) (int, error) {
 	for i := range g.packages {
 		if g.packages[i].Path != imp {
 			continue
 		}
 
-		return i
+		return i, nil
 	}
 
 	dst, _ := path.Split(g.destination)
@@ -132,21 +150,17 @@ func (g *Generator) registerPackage(imp string) int {
 		imp,
 	)
 	if err != nil {
-		panic(
-			fmt.Errorf(
-				"failed to load package %s: %w",
-				imp,
-				err,
-			),
+		return 0, fmt.Errorf(
+			"failed to load package %s: %w",
+			imp,
+			err,
 		)
 	}
 	if len(rp) != 1 {
-		panic(
-			fmt.Errorf(
-				"unexpected number of packages returned for %s (%d)",
-				imp,
-				len(rp),
-			),
+		return 0, fmt.Errorf(
+			"unexpected number of packages returned for %s (%d)",
+			imp,
+			len(rp),
 		)
 	}
 
@@ -170,22 +184,24 @@ func (g *Generator) registerPackage(imp string) int {
 		Name: n,
 	})
 
-	return id
+	return id, nil
 }
 
-func RegisterComposition(g *Generator, name string, components ...ComponentID) {
+func RegisterComposition(
+	g *Generator,
+	name string,
+	components ...ComponentID,
+) error {
 	if !isValidIdentifier(name) {
-		panic(
-			fmt.Errorf(
-				"invalid name provided for composition (must be valid "+
-					"Go identifier): %s",
-				name,
-			),
+		return fmt.Errorf(
+			"invalid name provided for composition (must be valid Go "+
+				"identifier): %s",
+			name,
 		)
 	}
 
 	if !set.IsSet(components) {
-		panic("duplicate components provided")
+		return errors.New("duplicate components provided")
 	}
 
 	exists := slices.ContainsFunc(
@@ -195,11 +211,9 @@ func RegisterComposition(g *Generator, name string, components ...ComponentID) {
 		},
 	)
 	if exists {
-		panic(
-			fmt.Errorf(
-				"composition with name %s already registered",
-				name,
-			),
+		return fmt.Errorf(
+			"composition with name %s already registered",
+			name,
 		)
 	}
 
@@ -230,19 +244,44 @@ func RegisterComposition(g *Generator, name string, components ...ComponentID) {
 			g.compositionGraph[i] = append(g.compositionGraph[i], j)
 		}
 	}
+
+	return nil
 }
 
-func (g *Generator) Build() {
+func MustRegisterComposition(
+	g *Generator,
+	name string,
+	components ...ComponentID,
+) {
+	err := RegisterComposition(g, name, components...)
+	if err != nil {
+		panic(
+			fmt.Errorf(
+				"failed to register composition %s: %w",
+				name,
+				err,
+			),
+		)
+	}
+}
+
+func (g *Generator) Build() error {
 	tmpl, err := template.
 		New("generator").
 		Parse(fesTmpl)
 	if err != nil {
-		panic(err) // TODO wrap error
+		return fmt.Errorf(
+			"failed to parse template: %w",
+			err,
+		)
 	}
 
 	fo, err := os.Create(g.destination)
 	if err != nil {
-		panic(err) // TODO wrap error
+		return fmt.Errorf(
+			"failed to open output file: %w",
+			err,
+		)
 	}
 	defer func() {
 		_ = fo.Close()
@@ -252,7 +291,10 @@ func (g *Generator) Build() {
 
 	dst, err := destinationPackage(dir)
 	if err != nil {
-		panic(err) // TODO handle/wrap error?
+		return fmt.Errorf(
+			"failed to determine output package: %w",
+			err,
+		)
 	}
 
 	payload := newTemplatePayload{
@@ -335,30 +377,31 @@ func (g *Generator) Build() {
 		payload,
 	)
 	if err != nil {
-		panic(err) // TODO wrap error
+		return fmt.Errorf(
+			"failed to execute template: %w",
+			err,
+		)
 	}
 
 	// imports.Process implicitly runs gofmt, but has better import formatting
 	// rules so has been favoured here
 	result, err := imports.Process(g.destination, buf.Bytes(), nil)
 	if err != nil {
-		panic(
-			fmt.Errorf(
-				"failed to format output: %w",
-				err,
-			),
+		return fmt.Errorf(
+			"failed to format output: %w",
+			err,
 		)
 	}
 
 	_, err = fo.Write(result)
 	if err != nil {
-		panic(
-			fmt.Errorf(
-				"failed to write output: %w",
-				err,
-			),
+		return fmt.Errorf(
+			"failed to write output: %w",
+			err,
 		)
 	}
+
+	return nil
 }
 
 func toUpper(s string) string {
