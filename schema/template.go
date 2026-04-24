@@ -104,17 +104,17 @@ func buildTmplComponents(s *Schema, dst pkg) []tmplComponent {
 	cmps := make([]tmplComponent, 0, len(s.components))
 
 	for _, c := range s.components {
-		t := c.Name
+		t := c.typeName
 
-		if s.packages[c.PkgID].Path != dst.Path {
-			t = s.packages[c.PkgID].Name + "." + c.Name
+		if s.packages[c.pkgID].Path != dst.Path {
+			t = s.packages[c.pkgID].Name + "." + c.typeName
 		}
 
 		cmps = append(
 			cmps,
 			tmplComponent{
-				UpperName: toUpper(c.Name),
-				LowerName: toLower(c.Name),
+				UpperName: c.name.upper,
+				LowerName: c.name.lower,
 				Type:      t,
 			},
 		)
@@ -127,17 +127,17 @@ func buildTmplCompositions(s *Schema, cmps []tmplComponent) []tmplComposition {
 	cs := make([]tmplComposition, 0, len(s.compositions))
 
 	for _, c := range s.compositions {
-		cnts := make([]tmplComponent, 0, len(c.Components))
+		cnts := make([]tmplComponent, 0, len(c.components))
 
-		for _, id := range c.Components {
+		for _, id := range c.components {
 			cnts = append(cnts, cmps[id])
 		}
 
 		cs = append(
 			cs,
 			tmplComposition{
-				UpperName:   toUpper(c.Name),
-				LowerName:   toLower(c.Name),
+				UpperName:   c.name.upper,
+				LowerName:   c.name.lower,
 				Components:  cnts,
 				Compatibles: nil, // built below
 			},
@@ -154,43 +154,6 @@ func buildTmplCompositions(s *Schema, cmps []tmplComponent) []tmplComposition {
 	}
 
 	return cs
-}
-
-func toUpper(s string) string {
-	if s == "" {
-		return s
-	}
-
-	return strings.ToUpper(s[:1]) + s[1:]
-}
-
-func toLower(s string) string {
-	if s == "" {
-		return s
-	}
-
-	pos := 0
-
-	for i := range s {
-		if s[i] < 66 || s[i] > 90 {
-			break
-		}
-
-		pos = i
-	}
-
-	if pos == len(s)-1 {
-		return strings.ToLower(s)
-	}
-
-	// if first character is last sequential uppercase, then the first char must
-	// be made to be lower (Foo -> Foo) so artificially shift pos to account for
-	// this
-	if pos == 0 {
-		pos++
-	}
-
-	return strings.ToLower(s[:pos]) + s[pos:]
 }
 
 func destinationPackage(dir string) (pkg, error) {

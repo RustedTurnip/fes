@@ -34,15 +34,20 @@ func isValidIdentifier(id string) bool {
 
 type ComponentID = int
 
+type identifier struct {
+	lower string
+	upper string
+}
+
 type pkg struct {
 	Path string
 	Name string
 }
 
 type component struct {
-	PkgID int
-	Type  string
-	Name  string
+	pkgID    int
+	typeName string
+	name     identifier
 }
 
 func (c component) component() component {
@@ -50,8 +55,8 @@ func (c component) component() component {
 }
 
 type composition struct {
-	Name       string
-	Components []int
+	name       identifier
+	components []int
 }
 
 // Schema holds the configured Components and Compositions (provided by
@@ -90,10 +95,23 @@ func New(dst string) *Schema {
 // use in the definition of a Composition. The Component is of type T and the
 // provided name.
 func RegisterComponent[T any](s *Schema, name string) (ComponentID, error) {
+	names := identifier{
+		lower: toLower(name),
+		upper: toUpper(name),
+	}
+
+	ok, reason := isValidComponentName(names)
+	if !ok {
+		return 0, fmt.Errorf(
+			"invalid component name provided: %s",
+			reason,
+		)
+	}
+
 	exists := slices.ContainsFunc(
 		s.components,
 		func(c component) bool {
-			return strings.EqualFold(name, c.Name)
+			return strings.EqualFold(name, c.name.lower)
 		},
 	)
 	if exists {
@@ -114,10 +132,15 @@ func RegisterComponent[T any](s *Schema, name string) (ComponentID, error) {
 		)
 	}
 
+	tp, ts, _ := strings.Cut(rt.String(), ".")
+	if ts == "" {
+		ts = tp
+	}
+
 	c := component{
-		PkgID: pID,
-		Type:  rt.String(),
-		Name:  name,
+		pkgID:    pID,
+		typeName: ts,
+		name:     names,
 	}
 
 	s.components = append(s.components, c)
@@ -222,11 +245,16 @@ func RegisterComposition(
 	name string,
 	components ...ComponentID,
 ) error {
-	if !isValidIdentifier(name) {
+	names := identifier{
+		lower: toLower(name),
+		upper: toUpper(name),
+	}
+
+	ok, reason := isValidCompositionName(names)
+	if !ok {
 		return fmt.Errorf(
-			"invalid name provided for composition (must be valid Go "+
-				"identifier): %s",
-			name,
+			"invalid composition name provided: %s",
+			reason,
 		)
 	}
 
@@ -237,7 +265,7 @@ func RegisterComposition(
 	exists := slices.ContainsFunc(
 		s.compositions,
 		func(c composition) bool {
-			return strings.EqualFold(name, c.Name)
+			return strings.EqualFold(name, c.name.lower)
 		},
 	)
 	if exists {
@@ -248,8 +276,11 @@ func RegisterComposition(
 	}
 
 	at := composition{
-		Name:       name,
-		Components: components,
+		name: identifier{
+			lower: toLower(name),
+			upper: toUpper(name),
+		},
+		components: components,
 	}
 
 	i := len(s.compositions)
@@ -259,8 +290,8 @@ func RegisterComposition(
 	// subtypes
 	for j := range len(s.compositions) - 1 {
 		if set.IsSubset(
-			s.compositions[i].Components,
-			s.compositions[j].Components,
+			s.compositions[i].components,
+			s.compositions[j].components,
 		) {
 			s.compositionGraph[i] = append(s.compositionGraph[i], j)
 
@@ -268,8 +299,8 @@ func RegisterComposition(
 		}
 
 		if set.IsSubset(
-			s.compositions[j].Components,
-			s.compositions[i].Components,
+			s.compositions[j].components,
+			s.compositions[i].components,
 		) {
 			s.compositionGraph[j] = append(s.compositionGraph[j], i)
 		}
@@ -368,4 +399,95 @@ func Build(s *Schema) error {
 	}
 
 	return nil
+}
+
+func toUpper(s string) string {
+	if s == "" {
+		return s
+	}
+
+	return strings.ToUpper(s[:1]) + s[1:]
+}
+
+func toLower(s string) string {
+	if s == "" {
+		return s
+	}
+
+	pos := 0
+
+	for i := range s {
+		if s[i] < 66 || s[i] > 90 {
+			break
+		}
+
+		pos = i
+	}
+
+	if pos == len(s)-1 {
+		return strings.ToLower(s)
+	}
+
+	// if first character is last sequential uppercase, then the first char must
+	// be made to be lower (Foo -> Foo) so artificially shift pos to account for
+	// this
+	if pos == 0 {
+		pos++
+	}
+
+	return strings.ToLower(s[:pos]) + s[pos:]
+}
+
+func isValidComponentName(id identifier) (bool, string) {
+	if !isValidIdentifier(id.lower) {
+		return false, fmt.Sprintf(
+			`"%s" is not a valid Go identifier`,
+			id.lower,
+		)
+	}
+
+	lp := id.lower + "s"
+	if !isValidIdentifier(lp) {
+		return false, fmt.Sprintf(
+			`"%s" is not a valid Go identifier`,
+			lp,
+		)
+	}
+
+	up := id.upper + "s"
+	if !isValidIdentifier(up) {
+		return false, fmt.Sprintf(
+			`"%s" is not a valid Go identifier`,
+			up,
+		)
+	}
+
+	return true, ""
+}
+
+func isValidCompositionName(id identifier) (bool, string) {
+	if !isValidIdentifier(id.upper) {
+		return false, fmt.Sprintf(
+			`"%s" is not a valid Go identifier`,
+			id.upper,
+		)
+	}
+
+	lp := id.lower + "s"
+	if !isValidIdentifier(lp) {
+		return false, fmt.Sprintf(
+			`"%s" is not a valid Go identifier`,
+			lp,
+		)
+	}
+
+	up := id.upper + "s"
+	if !isValidIdentifier(up) {
+		return false, fmt.Sprintf(
+			`"%s" is not a valid Go identifier`,
+			up,
+		)
+	}
+
+	return true, ""
 }
