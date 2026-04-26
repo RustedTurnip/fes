@@ -19,7 +19,7 @@
 - [x] When checking if the name of a Component or Composition is a valid
   identifier, we should check the Upper and Lower versions of the name
   instead of the name itself.
-- [ ] Add config to Schema constructor so non-breaking options can be added
+- [x] Add config to Schema constructor so non-breaking options can be added
   later.
 - [ ] Add README.md.
 - [ ] Unit tests.

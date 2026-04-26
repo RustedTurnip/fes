@@ -83,11 +83,27 @@ type Schema struct {
 	compositionGraph [][]int
 }
 
+type Config struct {
+	// Output is the desired output file location. Where not provided,
+	// "./fes_gen.go" will be used.
+	Output string
+}
+
+func (c Config) applyDefaults() Config {
+	if c.Output == "" {
+		c.Output = "./fes_gen.go"
+	}
+
+	return c
+}
+
 // New instantiates a new Schema configured with the desired output location
 // provided as dst which should be the path to the desired output file.
-func New(dst string) *Schema {
+func New(cfg Config) *Schema {
+	cfg = cfg.applyDefaults()
+
 	return &Schema{
-		destination: dst,
+		destination: cfg.Output,
 	}
 }
 
