@@ -21,8 +21,16 @@
   instead of the name itself.
 - [x] Add config to Schema constructor so non-breaking options can be added
   later.
-- [ ] Add README.md.
+- [x] Add README.md.
+- [ ] Allow Compositions or Components to be added to RegisterComposition
+  for convenience.
+- [ ] Add documentation to the output template for users when using the
+  resulting store.
+- [ ] Consider allowing querying of specifically only that Composition, i.e. 
+  when querying for Foos, if requested only Foos are guaranteed to be returned
+  (rather than Foos and FooBars).
 - [ ] Unit tests.
+- [ ] Reevaluate internal Component/Composition naming.
 
 ## Should do
 
