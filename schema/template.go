@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path"
+	"path/filepath"
 	"strings"
 
 	"golang.org/x/mod/modfile"
@@ -57,7 +58,15 @@ type tmplData struct {
 }
 
 func schemaToTemplData(s *Schema) (tmplData, error) {
-	dir, _ := path.Split(s.destination)
+	ap, err := filepath.Abs(s.destination)
+	if err != nil {
+		return tmplData{}, fmt.Errorf(
+			"failed to determine absolute package path: %w",
+			err,
+		)
+	}
+
+	dir, _ := path.Split(ap)
 
 	dst, err := destinationPackage(dir)
 	if err != nil {
