@@ -82,6 +82,11 @@ func buildTmplImports(s *Schema, dst pkg) []string {
 	imports := make([]string, 0, len(s.packages))
 
 	for _, p := range s.packages {
+		// below handles primitive types with no import (int etc.)
+		if dst.Path == "" {
+			continue
+		}
+
 		if dst.Path == p.Path {
 			continue
 		}
@@ -104,9 +109,15 @@ func buildTmplComponents(s *Schema, dst pkg) []tmplComponent {
 	cmps := make([]tmplComponent, 0, len(s.components))
 
 	for _, c := range s.components {
-		t := c.typeName
+		var t string
 
-		if s.packages[c.pkgID].Path != dst.Path {
+		switch s.packages[c.pkgID].Path {
+		case "", dst.Path:
+			// no package name required before type in this case
+			t = c.typeName
+
+		default:
+			// package must be specified
 			t = s.packages[c.pkgID].Name + "." + c.typeName
 		}
 
