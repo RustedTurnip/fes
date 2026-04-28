@@ -110,7 +110,7 @@ func (s *Store) {{$csn.UpperName}}ByID(id int) (
     return {{range $i, $cnt := $csn.Components -}}
     {{- if $i}},
         {{end -}}
-    s.{{$csn.LowerName}}s.{{$cnt.LowerName}}s[key.index]
+    &s.{{$csn.LowerName}}s.{{$cnt.LowerName}}s[key.index]
     {{- end}}
 }
 
