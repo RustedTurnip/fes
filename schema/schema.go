@@ -66,6 +66,11 @@ type Schema struct {
 	// destination is the path to the output file as specified by the user.
 	destination string
 
+	// packageOverride is the name to override the output package name with.
+	// This is provided to the Schema via Config and can will be ignored when
+	// not set.
+	packageOverride string
+
 	// packages is a registry of unique imports that are used by the provided
 	// components.
 	packages []pkg
@@ -87,6 +92,16 @@ type Config struct {
 	// Output is the desired output file location. Where not provided,
 	// "./fes_gen.go" will be used.
 	Output string
+
+	// Package is the name of the package that the output will be generated to
+	// (not including the path). When left blank, fes will attempt to calculate
+	// what the package should be, either from other Go files already in the
+	// Output location, or from the Output file path.
+	//
+	// Package should typically left empty, and only used when a specific
+	// package name is desired that doesn't match the values that would be
+	// defaulted to.
+	Package string
 }
 
 func (c Config) applyDefaults() Config {

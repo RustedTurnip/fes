@@ -76,6 +76,10 @@ func schemaToTemplData(s *Schema) (tmplData, error) {
 		)
 	}
 
+	if s.packageOverride != "" {
+		dst.Name = s.packageOverride
+	}
+
 	components := buildTmplComponents(s, dst)
 
 	return tmplData{
