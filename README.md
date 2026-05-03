@@ -5,6 +5,16 @@ ECS-based projects. It is intended to be used within a pre-compile script, where
 a "schema" that accommodates the project's entity types is defined and built
 using `fes`.
 
+## Why `fes`?
+
+- Gives you compile-time type-safety when handling entity storage.
+- Provides the performance of sequential memory access.
+- Avoids interfaces and the expensive lookups they incur.
+- Although it adds a pre-compile build stage to your project, `fes` provides a
+  simple interface and can be easily slotted into a project with `go generate`.
+
+## Concepts
+
 `fes` makes use of two concepts:
 - **Components**: these are the building blocks of the types of entity you 
   define using `fes`. These can be thought of as the fields an entity may 
