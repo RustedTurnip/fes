@@ -22,6 +22,8 @@
 - [x] Add config to Schema constructor so non-breaking options can be added
   later.
 - [x] Add README.md.
+- [ ] Use Composition "namespacing" to improve how user-provided names are 
+  translated to store accessors.
 - [ ] Allow Compositions or Components to be added to RegisterComposition
   for convenience.
 - [ ] Add documentation to the output template for users when using the
