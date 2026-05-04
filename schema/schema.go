@@ -19,13 +19,19 @@ import (
 	"golang.org/x/tools/imports"
 )
 
+const module = "github.com/rustedturnip/fes"
+
 var version string
 
 func init() {
+	setVersion()
+}
+
+func setVersion() {
 	bi, _ := debug.ReadBuildInfo()
 
 	for i := range bi.Deps {
-		if bi.Deps[i].Path != "github.com/rustedturnip/fes" {
+		if bi.Deps[i].Path != module {
 			continue
 		}
 
@@ -34,7 +40,13 @@ func init() {
 		return
 	}
 
-	panic("failed to retrieve fes version")
+	if bi.Main.Path == module {
+		version = bi.Main.Version
+
+		return
+	}
+
+	version = "unknown"
 }
 
 func isValidIdentifier(id string) bool {
