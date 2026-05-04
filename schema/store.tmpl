@@ -50,7 +50,7 @@ type {{.UpperName}}Accessor struct {
 }
 
 func (a *{{.UpperName}}Accessor) Next() bool {
-	if a.current < len(a.ids)-1 {
+	if a.current == len(a.ids)-1 {
 		return false
 	}
 

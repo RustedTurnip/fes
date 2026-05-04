@@ -40,7 +40,7 @@ type PositionableAccessor struct {
 }
 
 func (a *PositionableAccessor) Next() bool {
-	if a.current < len(a.ids)-1 {
+	if a.current == len(a.ids)-1 {
 		return false
 	}
 
@@ -79,7 +79,7 @@ type TravellableAccessor struct {
 }
 
 func (a *TravellableAccessor) Next() bool {
-	if a.current < len(a.ids)-1 {
+	if a.current == len(a.ids)-1 {
 		return false
 	}
 
@@ -117,7 +117,7 @@ type TraderAccessor struct {
 }
 
 func (a *TraderAccessor) Next() bool {
-	if a.current < len(a.ids)-1 {
+	if a.current == len(a.ids)-1 {
 		return false
 	}
 
@@ -163,7 +163,7 @@ type ShipAccessor struct {
 }
 
 func (a *ShipAccessor) Next() bool {
-	if a.current < len(a.ids)-1 {
+	if a.current == len(a.ids)-1 {
 		return false
 	}
 
