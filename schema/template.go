@@ -96,11 +96,11 @@ func buildTmplImports(s *Schema, dst pkg) []string {
 
 	for _, p := range s.packages {
 		// below handles primitive types with no import (int etc.)
-		if dst.Path == "" {
+		if p.Path == "" {
 			continue
 		}
 
-		if dst.Path == p.Path {
+		if p.Path == dst.Path {
 			continue
 		}
 

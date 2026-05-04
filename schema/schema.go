@@ -218,6 +218,13 @@ func registerPackage(s *Schema, imp string) (int, error) {
 		return i, nil
 	}
 
+	if imp == "" {
+		// empty pkg represents stdlib
+		s.packages = append(s.packages, pkg{})
+
+		return len(s.packages) - 1, nil
+	}
+
 	dst, _ := path.Split(s.destination)
 
 	rp, err := packages.Load(
