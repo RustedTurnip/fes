@@ -8,6 +8,7 @@ import (
 	"os"
 	"path"
 	"reflect"
+	"runtime/debug"
 	"slices"
 	"strconv"
 	"strings"
@@ -18,7 +19,23 @@ import (
 	"golang.org/x/tools/imports"
 )
 
-const version = "v0.1.0-dev"
+var version string
+
+func init() {
+	bi, _ := debug.ReadBuildInfo()
+
+	for i := range bi.Deps {
+		if bi.Deps[i].Path != "github.com/rustedturnip/fes" {
+			continue
+		}
+
+		version = bi.Deps[i].Version
+
+		return
+	}
+
+	panic("failed to retrieve fes version")
+}
 
 func isValidIdentifier(id string) bool {
 	if !token.IsIdentifier(id) {
