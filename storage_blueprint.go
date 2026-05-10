@@ -69,11 +69,18 @@ func newStore_Foo(keys *[]*entityKey, foobar *store_foobar) *store_foo {
 			nil,    // compositionIDBar,
 			new(1), // compositiionIDFooBar
 		},
+		ids: []*[]int{
+			new([]int),    // compositionIDFoo,
+			foobar.ids[0], // compositiionIDFooBar
+		},
+		foos: []*[]Foo{
+			new([]Foo),     // compositionIDFoo,
+			foobar.foos[0], // compositiionIDFooBar
+		},
 	}
 
 	store.delFns = []func(int){
 		store.deleteNative,  // compositionIDFoo
-		nil,                 // compositionIDBar
 		foobar.deleteNative, // compositionIDFooBar
 	}
 
@@ -209,12 +216,19 @@ func newStore_Bar(keys *[]*entityKey, foobar *store_foobar) *store_bar {
 			new(0), // compositionIDBar,
 			new(1), // compositiionIDFooBar
 		},
+		ids: []*[]int{
+			new([]int),    // compositionIDBar,
+			foobar.ids[0], // compositiionIDFooBar
+		},
+		bars: []*[]Bar{
+			new([]Bar),     // compositionIDBar,
+			foobar.foos[0], // compositiionIDFooBar
+		},
 	}
 
 	store.delFns = []func(int){
-		nil,
-		store.deleteNative,
-		foobar.deleteNative,
+		store.deleteNative,  // compositionIDBar
+		foobar.deleteNative, // compositionIDFooBar
 	}
 
 	return store
@@ -350,13 +364,17 @@ func newStore_FooBar(keys *[]*entityKey) *store_foobar {
 		typeMap: []*int{
 			nil,    // compositionIDFoo,
 			nil,    // compositionIDBar,
-			new(1), // compositiionIDFooBar
+			new(0), // compositiionIDFooBar
+		},
+		ids: []*[]int{
+			new([]int), // compositionIDFooBar,
+		},
+		bars: []*[]Bar{
+			new([]FooBar), // compositionIDFooBar,
 		},
 	}
 
 	store.delFns = []func(int){
-		nil,
-		nil,
 		store.deleteNative,
 	}
 
