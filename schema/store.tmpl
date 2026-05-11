@@ -11,14 +11,14 @@ type compositionID uint64
 
 const (
 {{- range $index, $c := .Compositions}}
-    compositionID{{$c.UpperName}}
+    compositionID_{{$c.Name}}
     {{- if not $index}} compositionID = iota{{end}}
 {{- end}}
 )
 
 var (
 {{- range .Components}}
-    zero{{.UpperName}} {{.Type -}}
+    zero_{{.Name}} {{.Type -}}
 {{- end}}
 )
 
@@ -27,138 +27,212 @@ type entityKey struct {
 	index       int
 }
 {{range .Compositions}}
-type store{{.UpperName}} struct {
-    ids []int
-    {{- range .Components}}
-    {{.LowerName}}s []{{.Type}}
-    {{- end}}
-}
-
-type {{.UpperName}}Result struct {
+type {{.Name}}Result struct {
     IDs []int
     {{- range .Components}}
-    {{.UpperName}}s []{{.Type}}
+    cpnt_{{.Name}}s []{{.Type}}
     {{- end}}
 }
 
-type {{.UpperName}}Accessor struct {
+type {{.Name}}Accessor struct {
     current int
-    ids [][]int
+    ids []*[]int
     {{- range .Components}}
-    slices{{.UpperName}} [][]{{.Type}}
+    cpnt_{{.Name}}s []*[]{{.Type}}
     {{- end}}
 }
 
-func (a *{{.UpperName}}Accessor) Next() bool {
-	if a.current == len(a.ids)-1 {
-		return false
-	}
+func (a *{{.Name}}Accessor) Next() bool {
+    if a.current == len(a.ids)-1 {
+        return false
+    }
 
-	a.current++
+    a.current++
 
-	return true
+    return true
 }
 
-func (a *{{.UpperName}}Accessor) {{.UpperName}}s() {{.UpperName}}Result {
-    return {{.UpperName}}Result{
-        IDs: a.ids[a.current],
+func (a *{{.Name}}Accessor) {{.Name}}s() {{.Name}}Result {
+    return {{.Name}}Result{
+        IDs: *a.ids[a.current],
         {{- range .Components}}
-        {{.UpperName}}s: a.slices{{.UpperName}}[a.current],
+        cpnt_{{.Name}}s: *a.cpnt_{{.Name}}s[a.current],
         {{- end}}
     }
 }
-{{end}}
-type Store struct {
-    ids []*entityKey
-    {{- range .Compositions}}
-    {{.LowerName}}s store{{.UpperName}}
+
+type {{.Name}}Store interface {
+    Put(
+        {{- range .Components}}
+        {{.Name}} {{.Type}},
+        {{- end}}
+    ) (id int)
+    ByID(id int) (
+        {{- range .Components}}
+        {{.Name}} {{.Type}},
+        {{- end}}
+    )
+    All() {{.Name}}Accessor
+    Delete(id int)
+}
+
+type store_{{.Name}} struct {
+    keys *[]*entityKey
+    typeMap []*int
+    delFns []func(int)
+    ids []*[]int
+    {{- range .Components}}
+    cpnt_{{.Name}}s []*[]{{.Type}}
     {{- end}}
 }
 
-var deleteFunctions = []func(store *Store, key entityKey){
-{{- range .Compositions}}
-    func(store *Store, key entityKey) {
-        {{- $subStore := print .LowerName "s"}}
-        deleted := store.{{$subStore}}.ids[key.index]
-
-        store.{{$subStore}}.ids[key.index] = store.{{$subStore}}.ids[len(store.{{$subStore}}.ids)-1]
-		store.{{$subStore}}.ids = store.{{$subStore}}.ids[:len(store.{{$subStore}}.ids)-1]
-
-		{{- range .Components}}
-
-        {{$slice := print "store." $subStore "." .LowerName "s" -}}
-		{{$slice}}[key.index] = {{$slice}}[len({{$slice}})-1]
-        {{- /*line below prevents memory leaking pointer values in slice*/}}
-		{{$slice}}[len({{$slice}})-1] = zero{{.UpperName}}
-		{{$slice}} = {{$slice}}[:len({{$slice}})-1]
-		{{- end}}
-
-		store.ids[deleted] = nil
-		store.ids[store.{{$subStore}}.ids[key.index]].index = key.index
-    },
-{{- end}}
-}
-
-{{- range $csn := .Compositions}}
-func (s *Store) {{$csn.UpperName}}ByID(id int) (
-    {{- range $csn.Components}}
-    {{.LowerName}} *{{.Type}},
+func (s *store_{{.Name}}) {{.Name}}ByID(id int) (
+    {{- range .Components}}
+    cpnt_{{.Name}} *{{.Type}},
     {{- end}}
 ){
-    key := s.ids[id]
+    k := (*s.keys)[id]
 
-    return {{range $i, $cnt := $csn.Components -}}
-    {{- if $i}},
+    i := s.typeMap[k.composition]
+    if i == nil {
+        panic(
+            fmt.Errorf(
+                "entity of provided ID does not implement {{.Name}}",
+                id,
+            ),
+        )
+    }
+
+    return {{range $index, $cpnt := .Components}}
+        {{- if $index}},
         {{end -}}
-    &s.{{$csn.LowerName}}s.{{$cnt.LowerName}}s[key.index]
-    {{- end}}
+        (*s.cpnt_{{$cpnt.Name}}s[*i])[k.index]
+        {{- end}}
 }
 
-func (s *Store) {{$csn.UpperName}}s() *{{$csn.UpperName}}Accessor {
-    return &{{$csn.UpperName}}Accessor{
+func (s *store_{{.Name}}) All() {{.Name}}Accessor {
+    return {{.Name}}Accessor {
         current: 0,
-        ids: [][]int{
-            s.{{$csn.LowerName}}s.ids,
-            {{- range $csn.Compatibles}}
-            s.{{.LowerName}}s.ids,
-            {{- end}}
-        },
-        {{- range $cnt := $csn.Components}}
-        slices{{$cnt.UpperName}}: [][]{{.Type}}{
-            s.{{$csn.LowerName}}s.{{$cnt.LowerName}}s,
-            {{- range $csn.Compatibles}}
-            s.{{.LowerName}}s.{{$cnt.LowerName}}s,
-            {{- end}}
-        },
+        ids: s.ids,
+        {{range .Components}}
+        cpnt_{{.Name}}s: s.cpnt_{{.Name}}s,
         {{- end}}
     }
 }
 
-func (s *Store) Put{{$csn.UpperName}}(
-    {{- range $csn.Components}}
-    c{{.UpperName}} {{.Type}},
-    {{- end}}
-) int {
-    id := len(s.ids)
+func (s *store_{{.Name}}) Delete(id int) {
+    k := (*s.keys)[id]
 
-    s.ids = append(s.ids, &entityKey{
-        composition: compositionID{{$csn.UpperName}},
-        index: len(s.{{$csn.LowerName}}s.ids),
-    })
+    i := s.typeMap[k.composition]
+    if i == nil {
+        panic(
+            fmt.Errorf(
+                "entity of provided ID does not implement {{.Name}}",
+                id,
+            ),
+        )
+    }
 
-    s.{{$csn.LowerName}}s.ids = append(s.{{$csn.LowerName}}s.ids, id)
-    {{- range $csn.Components}}
-    s.{{$csn.LowerName}}s.{{.LowerName}}s = append(
-        s.{{$csn.LowerName}}s.{{.LowerName}}s,
-        c{{.UpperName}},
-    )
-    {{- end}}
-
-    return id
+    s.delFns[*i](id)
 }
-{{end}}
-func Delete(store *Store, id int) {
-	key := store.ids[id]
 
-	deleteFunctions[key.composition](store, *key)
+func (s *store_{{.Name}}) deleteNative(id int) {
+    k := (*s.keys)[id]
+
+    (*s.ids[0]) = (*s.ids[len((*s.ids[0]))-1])
+    *s.ids[0] = (*s.ids[0])[:len(*s.ids[0])-1]
+
+    {{- range .Components}}
+
+    (*s.cpnt_{{.Name}}s[0])[k.index] = (*s.cpnt_{{.Name}}s[0])[len((*s.cpnt_{{.Name}}s[0]))-1]
+    (*s.cpnt_{{.Name}}s[0])[len(s.cpnt_{{.Name}}s)-1] = zero_{{.Name}}
+    *s.cpnt_{{.Name}}s[0] = (*s.cpnt_{{.Name}}s[0])[:len((*s.cpnt_{{.Name}}s[0]))-1]
+    {{- end}}
+
+    (*s.keys)[id] = nil
+    (*s.keys)[(*s.ids[0])[k.index]].index = k.index
+}
+
+func newStore_{{.Name}}(
+    keys *[]*entityKey,
+    {{- range .Compatibles -}}
+    {{- if .}}
+    {{.Name}} *store_{{.Name}},
+    {{- end -}}
+    {{- end}}
+) *store_{{.Name}} {
+    store := &store_{{.Name}}{
+        keys: keys,
+        typeMap: []*int{
+            {{- $self := . -}}
+            {{- $count := 1 -}}
+            {{- range $i, $comp := .Compatibles}}
+            {{- if eq $i $self.ID}}
+            new(0),
+            {{- else if not $comp}}
+            nil,
+            {{- else}}
+            new({{$count}}),
+            {{$count = inc $count}}
+            {{- end -}}
+            {{- end}}
+        },
+        ids: []*[]int{
+            new([]int),
+            {{- range .Compatibles}}
+            {{- if .}}
+            {{.Name}}.ids[0],
+            {{- end -}}
+            {{- end}}
+        },
+        {{range .Components}}
+        {{$cpnt := .}}
+        cpnt_{{.Name}}s: []*[]{{.Type}}{
+            new([]{{.Type}}),
+            {{- range $self.Compatibles}}
+            {{- if .}}
+            {{.Name}}.cpnt_{{$cpnt.Name}}s[0],
+            {{- end -}}
+            {{- end}}
+        },
+        {{end}}
+    }
+
+    store.delFns = []func(int){
+        store.deleteNative,
+        {{- range .Compatibles}}
+        {{- if .}}
+        {{.Name}}.deleteNative,
+        {{- end -}}
+        {{- end}}
+    }
+
+    return store
+}
+{{- end}}
+
+type Store struct {
+    idMap []*entityKey
+    {{- range .Compositions}}
+    {{.Name}} {{.Name}}Store
+    {{- end}}
+}
+
+func NewStore() *Store {
+    s := &Store{}
+    {{range .Compositions}}
+    {{.Name}} := newStore_{{.Name}}(
+        &s.idMap,
+        {{- range .Compatibles}}
+        {{- if .}}
+        {{.Name}},
+        {{- end -}}
+        {{- end}}
+    )
+    {{end}}
+    {{range .Compositions}}
+    s.{{.Name}} = {{.Name}}
+    {{- end}}
+
+    return s
 }

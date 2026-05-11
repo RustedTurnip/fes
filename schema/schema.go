@@ -63,11 +63,6 @@ func isValidIdentifier(id string) bool {
 
 type ComponentID = int
 
-type identifier struct {
-	lower string
-	upper string
-}
-
 type pkg struct {
 	Path string
 	Name string
@@ -76,7 +71,7 @@ type pkg struct {
 type component struct {
 	pkgID    int
 	typeName string
-	name     identifier
+	name     string
 }
 
 func (c component) component() component {
@@ -84,8 +79,42 @@ func (c component) component() component {
 }
 
 type composition struct {
-	name       identifier
+	name       string
 	components []int
+}
+
+type graph [][]int
+
+// sort returns a topologically ordered list of the graph's nodes (indices).
+// sort assumes that the graph is acyclic.
+func (g graph) sort() []int {
+	resolved := make([]bool, len(g))
+	result := make([]int, 0, len(g))
+
+	var visit func(i int)
+
+	visit = func(i int) {
+		for j := range g[i] {
+			if resolved[g[i][j]] {
+				continue
+			}
+
+			visit(g[i][j])
+		}
+
+		resolved[i] = true
+		result = append(result, i)
+	}
+
+	for i := range g {
+		if resolved[i] {
+			continue
+		}
+
+		visit(i)
+	}
+
+	return result
 }
 
 // Schema holds the configured Components and Compositions (provided by
@@ -114,7 +143,7 @@ type Schema struct {
 	// compositionGraph tracks the subtypes of each composition. It can be
 	// thought of as a map, where the index is the ID of the composition, and
 	// the slice value contains a list of that compositions subtypes.
-	compositionGraph [][]int
+	compositionGraph graph
 }
 
 type Config struct {
@@ -155,23 +184,17 @@ func New(cfg Config) *Schema {
 // use in the definition of a Composition. The Component is of type T and the
 // provided name.
 func RegisterComponent[T any](s *Schema, name string) (ComponentID, error) {
-	names := identifier{
-		lower: toLower(name),
-		upper: toUpper(name),
-	}
-
-	ok, reason := isValidComponentName(names)
-	if !ok {
+	if !isValidIdentifier(name) {
 		return 0, fmt.Errorf(
 			"invalid component name provided: %s",
-			reason,
+			name,
 		)
 	}
 
 	exists := slices.ContainsFunc(
 		s.components,
 		func(c component) bool {
-			return strings.EqualFold(name, c.name.lower)
+			return strings.EqualFold(name, c.name)
 		},
 	)
 	if exists {
@@ -200,7 +223,7 @@ func RegisterComponent[T any](s *Schema, name string) (ComponentID, error) {
 	c := component{
 		pkgID:    pID,
 		typeName: ts,
-		name:     names,
+		name:     name,
 	}
 
 	s.components = append(s.components, c)
@@ -305,23 +328,16 @@ func registerPackage(s *Schema, imp string) (int, error) {
 // is a set of Components that make up an "entity type".
 //
 // The provided components must be unique to each other, and name must be unique
-// to the other Components in a case-insensitive way. The name must also be a
-// valid Go identifier.
+// to the other Components. The name must also be a valid Go identifier.
 func RegisterComposition(
 	s *Schema,
 	name string,
 	components ...ComponentID,
 ) error {
-	names := identifier{
-		lower: toLower(name),
-		upper: toUpper(name),
-	}
-
-	ok, reason := isValidCompositionName(names)
-	if !ok {
+	if !isValidIdentifier(name) {
 		return fmt.Errorf(
 			"invalid composition name provided: %s",
-			reason,
+			name,
 		)
 	}
 
@@ -332,7 +348,7 @@ func RegisterComposition(
 	exists := slices.ContainsFunc(
 		s.compositions,
 		func(c composition) bool {
-			return strings.EqualFold(name, c.name.lower)
+			return strings.EqualFold(name, c.name)
 		},
 	)
 	if exists {
@@ -343,10 +359,7 @@ func RegisterComposition(
 	}
 
 	at := composition{
-		name: identifier{
-			lower: toLower(name),
-			upper: toUpper(name),
-		},
+		name:       name,
 		components: components,
 	}
 
@@ -407,6 +420,11 @@ func MustRegisterComposition(
 func Build(s *Schema) error {
 	tmpl, err := template.
 		New("generator").
+		Funcs(template.FuncMap{
+			"inc": func(i int) int {
+				return i + 1
+			},
+		}).
 		Parse(fesTmpl)
 	if err != nil {
 		return fmt.Errorf(
@@ -415,7 +433,7 @@ func Build(s *Schema) error {
 		)
 	}
 
-	data, err := schemaToTemplData(s)
+	data, err := schemaToTmplData(s)
 	if err != nil {
 		return fmt.Errorf(
 			"failed to build from schema: %w",
@@ -466,95 +484,4 @@ func Build(s *Schema) error {
 	}
 
 	return nil
-}
-
-func toUpper(s string) string {
-	if s == "" {
-		return s
-	}
-
-	return strings.ToUpper(s[:1]) + s[1:]
-}
-
-func toLower(s string) string {
-	if s == "" {
-		return s
-	}
-
-	pos := 0
-
-	for i := range s {
-		if s[i] < 66 || s[i] > 90 {
-			break
-		}
-
-		pos = i
-	}
-
-	if pos == len(s)-1 {
-		return strings.ToLower(s)
-	}
-
-	// if first character is last sequential uppercase, then the first char must
-	// be made to be lower (Foo -> Foo) so artificially shift pos to account for
-	// this
-	if pos == 0 {
-		pos++
-	}
-
-	return strings.ToLower(s[:pos]) + s[pos:]
-}
-
-func isValidComponentName(id identifier) (bool, string) {
-	if !isValidIdentifier(id.lower) {
-		return false, fmt.Sprintf(
-			`"%s" is not a valid Go identifier`,
-			id.lower,
-		)
-	}
-
-	lp := id.lower + "s"
-	if !isValidIdentifier(lp) {
-		return false, fmt.Sprintf(
-			`"%s" is not a valid Go identifier`,
-			lp,
-		)
-	}
-
-	up := id.upper + "s"
-	if !isValidIdentifier(up) {
-		return false, fmt.Sprintf(
-			`"%s" is not a valid Go identifier`,
-			up,
-		)
-	}
-
-	return true, ""
-}
-
-func isValidCompositionName(id identifier) (bool, string) {
-	if !isValidIdentifier(id.upper) {
-		return false, fmt.Sprintf(
-			`"%s" is not a valid Go identifier`,
-			id.upper,
-		)
-	}
-
-	lp := id.lower + "s"
-	if !isValidIdentifier(lp) {
-		return false, fmt.Sprintf(
-			`"%s" is not a valid Go identifier`,
-			lp,
-		)
-	}
-
-	up := id.upper + "s"
-	if !isValidIdentifier(up) {
-		return false, fmt.Sprintf(
-			`"%s" is not a valid Go identifier`,
-			up,
-		)
-	}
-
-	return true, ""
 }

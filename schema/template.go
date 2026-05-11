@@ -18,13 +18,8 @@ import (
 var fesTmpl string
 
 type tmplComponent struct {
-	// UpperName is the user-provided name of the component, but with the first
-	// character capitalised.
-	UpperName string
-
-	// UpperName is the user-provided name of the component, but with the first
-	// character lower-case.
-	LowerName string
+	// Name is the user-provided name of the component
+	Name string
 
 	// Type is the type of the component as a string (prefixed with "<package>."
 	// where the type is imported from elsewhere. This is therefore ready to use
@@ -33,13 +28,10 @@ type tmplComponent struct {
 }
 
 type tmplComposition struct {
-	// UpperName is the user-provided name of the composition, but with the
-	// first character capitalised.
-	UpperName string
+	ID int
 
-	// UpperName is the user-provided name of the composition, but with the
-	// first character lower-case.
-	LowerName string
+	// Name is the user-provided name of the composition.
+	Name string
 
 	// Components is a list of all the components that come together to make an
 	// instance of the composition.
@@ -50,14 +42,17 @@ type tmplComposition struct {
 }
 
 type tmplData struct {
-	Version      string
-	Package      string
-	Imports      []string
-	Components   []tmplComponent
+	Version    string
+	Package    string
+	Imports    []string
+	Components []tmplComponent
+
+	// Compositions is a slice of template-friendly versions of the schema's
+	// Compositions, sorted topologically to prevent dependency issues.
 	Compositions []tmplComposition
 }
 
-func schemaToTemplData(s *Schema) (tmplData, error) {
+func schemaToTmplData(s *Schema) (tmplData, error) {
 	ap, err := filepath.Abs(s.destination)
 	if err != nil {
 		return tmplData{}, fmt.Errorf(
@@ -137,9 +132,8 @@ func buildTmplComponents(s *Schema, dst pkg) []tmplComponent {
 		cmps = append(
 			cmps,
 			tmplComponent{
-				UpperName: c.name.upper,
-				LowerName: c.name.lower,
-				Type:      t,
+				Name: c.name,
+				Type: t,
 			},
 		)
 	}
@@ -150,30 +144,42 @@ func buildTmplComponents(s *Schema, dst pkg) []tmplComponent {
 func buildTmplCompositions(s *Schema, cmps []tmplComponent) []tmplComposition {
 	cs := make([]tmplComposition, 0, len(s.compositions))
 
-	for _, c := range s.compositions {
-		cnts := make([]tmplComponent, 0, len(c.components))
+	to := s.compositionGraph.sort()
 
-		for _, id := range c.components {
+	idMap := make([]int, len(s.compositions))
+
+	for i := range idMap {
+		for j, id := range to {
+			if id != i {
+				continue
+			}
+
+			idMap[i] = j
+		}
+	}
+
+	for _, i := range to {
+		cnts := make([]tmplComponent, 0, len(s.components))
+
+		for _, id := range s.compositions[i].components {
 			cnts = append(cnts, cmps[id])
 		}
 
 		cs = append(
 			cs,
 			tmplComposition{
-				UpperName:   c.name.upper,
-				LowerName:   c.name.lower,
-				Components:  cnts,
-				Compatibles: nil, // built below
+				ID:         i,
+				Name:       s.compositions[i].name,
+				Components: cnts,
+				// Compatibles populated later
+				Compatibles: make([]*tmplComposition, len(s.compositions)),
 			},
 		)
 	}
 
-	for i := range cs {
-		for _, id := range s.compositionGraph[i] {
-			cs[i].Compatibles = append(
-				cs[i].Compatibles,
-				&cs[id],
-			)
+	for i := range s.compositions {
+		for _, j := range s.compositionGraph[i] {
+			cs[idMap[i]].Compatibles[idMap[j]] = &cs[idMap[j]]
 		}
 	}
 
