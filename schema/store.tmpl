@@ -27,13 +27,23 @@ type entityKey struct {
 	index       int
 }
 {{range .Compositions}}
+// {{.Name}}Result provides access to a batch of {{.Name}} whereby each index
+// across all the underlying slices represents a single entity/instance (i.e.
+// index 0 of each slice represents that specific component of the entity).
+//
+// To update the underlying entity, you can update the values of the enclosed
+// slices directly, but appending to the slices will not persist new entities
+// to the store.
 type {{.Name}}Result struct {
     IDs []int
     {{- range .Components}}
-    cpnt_{{.Name}}s []{{.Type}}
+    {{.Name}}s []{{.Type}}
     {{- end}}
 }
 
+// {{.Name}}Accessor provides access to all entities that implement {{.Name}},
+// either canonically or otherwise. It provides access via the slices in which
+// they are stored, and the batches must be iterated through via Next().
 type {{.Name}}Accessor struct {
     current int
     ids []*[]int
@@ -42,6 +52,9 @@ type {{.Name}}Accessor struct {
     {{- end}}
 }
 
+// Next progresses the {{.Name}}Accessor on to the next batch of {{.Name}}s (to
+// be subsequently retrieved via {{.Name}}s), unless false is returned, in which
+// there are no more batches and all {{.Name}}s have been exhausted.
 func (a *{{.Name}}Accessor) Next() bool {
     if a.current == len(a.ids)-1 {
         return false
@@ -52,15 +65,26 @@ func (a *{{.Name}}Accessor) Next() bool {
     return true
 }
 
+// {{.Name}}s returns a batch (grouped by underlying composition) of {{.Name}}s
+// in the form of {{.Name}}Result. The underlying {{.Name}} instances can be
+// accessed by querying the same index across all enclosed component slices,
+// i.e. the values within each slice at index 0 make up a single entity, the
+// same for index 1 and so forth.
 func (a *{{.Name}}Accessor) {{.Name}}s() {{.Name}}Result {
     return {{.Name}}Result{
         IDs: *a.ids[a.current],
         {{- range .Components}}
-        cpnt_{{.Name}}s: *a.cpnt_{{.Name}}s[a.current],
+        {{.Name}}s: *a.cpnt_{{.Name}}s[a.current],
         {{- end}}
     }
 }
 
+// {{.Name}}Store provides access to {{.Name}} instances, whether canonical
+// (implementing {{.Name}} directly), or other compositions that happen to
+// implement {{.Name}}.
+//
+// All {{.Name}} instances registered to the main Store can be accessed through
+// {{.Name}}Store.
 type {{.Name}}Store interface {
     Put(
         {{- range .Components}}
