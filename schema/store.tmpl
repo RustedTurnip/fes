@@ -86,7 +86,31 @@ type store_{{.Name}} struct {
     {{- end}}
 }
 
-func (s *store_{{.Name}}) {{.Name}}ByID(id int) (
+func (s *store_{{.Name}}) Put(
+    {{- $composition := . -}}
+    {{- range .Components}}
+    cpnt_{{.Name}} {{.Type}},
+    {{- end}}
+) (id int) {
+    id = len(*s.keys)
+
+    *s.keys = append(
+        *s.keys,
+        &entityKey{
+            composition: compositionID_{{$composition.Name}},
+            index:       len(*s.ids[0]),
+        },
+    )
+
+    *s.ids[0] = append(*s.ids[0], id)
+    {{- range .Components}}
+    *s.cpnt_{{.Name}}s[0] = append(*s.cpnt_{{.Name}}s[0], cpnt_{{.Name}})
+    {{- end}}
+
+    return id
+}
+
+func (s *store_{{.Name}}) ByID(id int) (
     {{- range .Components}}
     cpnt_{{.Name}} *{{.Type}},
     {{- end}}
