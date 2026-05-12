@@ -160,7 +160,7 @@ func (s *store_{{.Name}}) Delete(id int) {
     s.delFns[*i](id)
 }
 
-func (s *store_{{.Name}}) deleteNative(id int) {
+func (s *store_{{.Name}}) deleteCanonical(id int) {
     k := (*s.keys)[id]
 
     (*s.ids[0]) = (*s.ids[len((*s.ids[0]))-1])
@@ -223,10 +223,10 @@ func newStore_{{.Name}}(
     }
 
     store.delFns = []func(int){
-        store.deleteNative,
+        store.deleteCanonical,
         {{- range .Compatibles}}
         {{- if .}}
-        {{.Name}}.deleteNative,
+        {{.Name}}.deleteCanonical,
         {{- end -}}
         {{- end}}
     }
