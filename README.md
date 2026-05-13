@@ -105,10 +105,10 @@ func main() {
 
   // 3. Register your desired Compositions. These are sets of Components that
   //    can be later queried from the Store.
-  schema.MustRegisterComposition(s, "positionable", cPosition)
-  schema.MustRegisterComposition(s, "travellable", cPosition, cDirection, cVelocity)
-  schema.MustRegisterComposition(s, "trader", cIncome, cGold)
-  schema.MustRegisterComposition(s, "ship", cPosition, cDirection, cVelocity, cIncome, cGold)
+  schema.MustRegisterComposition(s, "Positionable", cPosition)
+  schema.MustRegisterComposition(s, "Travellable", cPosition, cDirection, cVelocity)
+  schema.MustRegisterComposition(s, "Trader", cIncome, cGold)
+  schema.MustRegisterComposition(s, "Ship", cPosition, cDirection, cVelocity, cIncome, cGold)
 
   // 4. Build the Schema into the custom Store. The Store will be outputted 
   //    in the Output location provided to the Schema's Config.
@@ -127,54 +127,50 @@ func main() {
 ## Store Usage
 
 For detailed documentation, you can consult the outputted `Store`, but at a 
-high-level, the resulting  `Store` provides the following methods:
+high-level, the resulting  `Store` contains a "namespace" (method) for each
+Composition. Each "namespace" contains the following interface:
 
 ### General
-- `Delete`: allows the deletion of an entity by its ID.
-
-### For Each Composition (e.g. Foo)
-- `PutFoo`: allows the insertion of a single entity of the desired Composition.
-- `FooByID`: query for a specific Composition using its ID.
-- `Foos`: query for all entities that match the desired Composition's
+- `Put`: allows the insertion of a single entity of the desired Composition.
+- `ByID`: query for a specific Composition using its ID.
+- `All`: query for all entities that match the desired Composition's
   interface. Access to the resulting entities is provided via an `Accessor`.
+- `Delete`: allows the deletion of an entity by its ID.
 
 #### Composition Accessor
 
-Each registered Composition has a Composition "Accessor". This can be thought of
-as the query result when querying for all of a type of Composition. Below is 
-an example Accessor for the arbitrary `FooBar` composition:
+Each registered Composition has an "Accessor". This can be thought of as the 
+query result when querying for all of a type of Composition. Below is an example
+of how to use an Accessor to visit all entities that implement that Composition:
 
 ```go
-// FooBarAccessor is the Accessor type for the Composition FooBar. It can be
-// queried for all entities that fit the FooBar Composition.
-type FooBarAccessor struct {
-    current   int
-    ids       [][]int
-    slicesFoo [][]Foo
-    slicesBar [][]Bar
-}
+func (s *PhysicsSystem) Run() {
+    // retrieve the MovableAccessor from the Store instance associated with
+    // PhysicsSystem
+    acc := s.store.Movable().All()
+	
+    // for each group of Movables
+    for {
+		// retrieve entity group
+		entities := acc.Movables()
+		
+        // for each entity within group
+        for i := range len(entities.IDs) {
+			// perform logic on entity
+            pos := calculatePosition(
+                entities.Position[0],
+                entities.Direction[0],
+                entities.Velocity[0],
+            )
+			
+            // update entity
+			entities.Position[0] = pos
+        }
 
-// Next moves through internal groupings of FooBars. You should keep calling 
-// Next until false is returned to ensure you have visited all FooBars.
-func (a *FooBarAccessor) Next() bool {
-    if a.current < len(a.ids)-1 {
-        return false
-    }
-
-    a.current++
-
-    return true
-}
-
-// FooBars provides access to the current group of FooBars. In the FooBar 
-// result, ids, slicesFoo and slicesBar are all the same length, and to refer to
-// each component of a single entity, each must be visited with that  entity's
-// index.
-func (a *FooBarAccessor) FooBars() FooBarResult {
-    return FooBarResult{
-        IDs:  a.ids[a.current],
-        Foos: a.slicesFoo[a.current],
-        Bars: a.slicesBar[a.current],
+		// if no more groups, cease system execution
+	    if !pos.Next() {
+            break
+        }
     }
 }
 ```
