@@ -98,7 +98,7 @@ type {{.Name}}Store interface {
     // the {{.Name}} fields of said instance.
     ByID(id int) (
         {{- range .Components}}
-        {{.Name}} {{.Type}},
+        {{.Name}} *{{.Type}},
         {{- end}}
     )
 
@@ -168,7 +168,7 @@ func (s *store_{{.Name}}) ByID(id int) (
     return {{range $index, $cpnt := .Components}}
         {{- if $index}},
         {{end -}}
-        (*s.cpnt_{{$cpnt.Name}}s[*i])[k.index]
+        &(*s.cpnt_{{$cpnt.Name}}s[*i])[k.index]
         {{- end}}
 }
 
