@@ -276,29 +276,39 @@ func newStore_{{.Name}}(
 // Store is the main storage component for all configured compositions,
 // providing namespaced access to each type of composition through its fields.
 //
-// Store must be instantiated through NewStore.
-type Store struct {
-    idMap []*entityKey
+// A Store instance can be created via NewStore.
+type Store interface {
     {{- range .Compositions}}
-    {{.Name}} {{.Name}}Store
+    {{.Name}}() {{.Name}}Store
     {{- end}}
 }
 
+type store struct {
+    idMap []*entityKey
+    {{- range .Compositions}}
+    _{{.Name}} *store_{{.Name}}
+    {{- end}}
+}
+
+{{range .Compositions}}
+func (s *store) {{.Name}}() {{.Name}}Store {
+    return s._{{.Name}}
+}
+{{end}}
+
 // NewStore returns a ready-to-use Store instance.
-func NewStore() *Store {
-    s := &Store{}
-    {{range .Compositions}}
-    {{.Name}} := newStore_{{.Name}}(
+func NewStore() Store {
+    s := &store{}
+    {{- range .Compositions}}
+
+    s._{{.Name}} = newStore_{{.Name}}(
         &s.idMap,
         {{- range .Compatibles}}
         {{- if .}}
-        {{.Name}},
+        s._{{.Name}},
         {{- end -}}
         {{- end}}
     )
-    {{end}}
-    {{range .Compositions}}
-    s.{{.Name}} = {{.Name}}
     {{- end}}
 
     return s
