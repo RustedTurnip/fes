@@ -86,17 +86,31 @@ func (a *{{.Name}}Accessor) {{.Name}}s() {{.Name}}Result {
 // All {{.Name}} instances registered to the main Store can be accessed through
 // {{.Name}}Store.
 type {{.Name}}Store interface {
+    // Put stores an instance (entity) of {{.Name}} in Store and returns its ID.
     Put(
         {{- range .Components}}
         {{.Name}} {{.Type}},
         {{- end}}
     ) (id int)
+
+    // ByID returns the instance of {{.Name}} with the provided ID. If the ID
+    // pertains to a non-canonical instance of {{.Name}}, it will still return
+    // the {{.Name}} fields of said instance.
     ByID(id int) (
         {{- range .Components}}
         {{.Name}} {{.Type}},
         {{- end}}
     )
+
+    // All returns a {{.Name}}Accessor that provides access to all {{.Name}}
+    // instances (canonical or otherwise). This should be used to perform
+    // composition-based actions to many instances.
     All() {{.Name}}Accessor
+
+    // Delete deletes the {{.Name}} instance of the provided ID. If the
+    // requested instance is not canonical (i.e. implements {{.Name}} but is of
+    // another composition), then it will still be deleted as though a deletion
+    // of the other type of composition was requested.
     Delete(id int)
 }
 
@@ -259,6 +273,10 @@ func newStore_{{.Name}}(
 }
 {{- end}}
 
+// Store is the main storage component for all configured compositions,
+// providing namespaced access to each type of composition through its fields.
+//
+// Store must be instantiated through NewStore.
 type Store struct {
     idMap []*entityKey
     {{- range .Compositions}}
@@ -266,6 +284,7 @@ type Store struct {
     {{- end}}
 }
 
+// NewStore returns a ready-to-use Store instance.
 func NewStore() *Store {
     s := &Store{}
     {{range .Compositions}}
