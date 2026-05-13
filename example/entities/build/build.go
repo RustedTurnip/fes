@@ -21,10 +21,10 @@ func main() {
 	cIncome := schema.MustRegisterComponent[int](s, "income")
 	cGold := schema.MustRegisterComponent[int](s, "gold")
 
-	schema.MustRegisterComposition(s, "positionable", cPosition)
-	schema.MustRegisterComposition(s, "travellable", cPosition, cDirection, cVelocity)
-	schema.MustRegisterComposition(s, "trader", cIncome, cGold)
-	schema.MustRegisterComposition(s, "ship", cPosition, cDirection, cVelocity, cIncome, cGold)
+	schema.MustRegisterComposition(s, "Positionable", cPosition)
+	schema.MustRegisterComposition(s, "Travellable", cPosition, cDirection, cVelocity)
+	schema.MustRegisterComposition(s, "Trader", cIncome, cGold)
+	schema.MustRegisterComposition(s, "Ship", cPosition, cDirection, cVelocity, cIncome, cGold)
 
 	err := schema.Build(s)
 	if err != nil {
