@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"go/token"
 	"os"
 	"path"
 	"reflect"
@@ -49,36 +48,61 @@ func setVersion() {
 	version = "unknown"
 }
 
-func isValidIdentifier(id string) bool {
-	if !token.IsIdentifier(id) {
-		return false
-	}
+type ComponentID = int
 
-	if token.IsKeyword(id) {
-		return false
-	}
-
-	return true
+// Component is the private interface to encourage user component types to be
+// explicitly defined (rather than inlined).
+type Component interface {
+	componentType() reflect.Type
 }
 
-type ComponentID = int
+type Composition interface {
+	isComposition()
+}
+
+var (
+	rtComponent   = reflect.TypeFor[Component]()
+	rtComposition = reflect.TypeFor[Composition]()
+)
+
+// ComponentBase implements component and is intended to be embedded anonymously
+// within user-defined components to provide compatibility with the component
+// interface.
+//
+// ComponentBase also implements ComponentGroup to allow components to be built
+// into compositions.
+type ComponentBase[T any] struct{}
+
+func (c ComponentBase[T]) componentType() reflect.Type {
+	return reflect.TypeFor[T]()
+}
+
+// CompositionBase implements composition and is intended to be embedded
+// anonymously within user-defined compositions to provide compatibility with
+// the composition interface.
+//
+// Unlike ComponentBase, types composed of CompositionBase do not implement
+// CompositionGroup.
+type CompositionBase struct{}
+
+func (c CompositionBase) isComposition() {}
 
 type pkg struct {
 	Path string
 	Name string
 }
 
-type component struct {
+type schemaComponent struct {
 	pkgID    int
 	typeName string
 	name     string
 }
 
-func (c component) component() component {
+func (c schemaComponent) component() schemaComponent {
 	return c
 }
 
-type composition struct {
+type schemaComposition struct {
 	name       string
 	components []int
 }
@@ -118,8 +142,8 @@ func (g graph) sort() []int {
 }
 
 // Schema holds the configured Components and Compositions (provided by
-// RegisterComponent and RegisterComposition). A Schema is used to build the
-// desired store compatible with said Components and Compositions (via Build).
+// RegisterComposition). A Schema is used to build the desired store compatible
+// with said Components and Compositions (via Build).
 type Schema struct {
 	// destination is the path to the output file as specified by the user.
 	destination string
@@ -133,12 +157,15 @@ type Schema struct {
 	// components.
 	packages []pkg
 
+	typeComponents   map[reflect.Type]int // TODO new field
+	typeCompositions map[reflect.Type]int // TODO new field
+
 	// components is a list of unique components provided to the Schema by the
 	// user. These components are used to construct compositions.
-	components []component
+	components []schemaComponent
 
 	// compositions is a list of unique compositions provided by the user.
-	compositions []composition
+	compositions []schemaComposition
 
 	// compositionGraph tracks the subtypes of each composition. It can be
 	// thought of as a map, where the index is the ID of the composition, and
@@ -180,78 +207,6 @@ func New(cfg Config) *Schema {
 	}
 }
 
-// RegisterComponent registers a new Component to the provided Schema for later
-// use in the definition of a Composition. The Component is of type T and the
-// provided name.
-func RegisterComponent[T any](s *Schema, name string) (ComponentID, error) {
-	if !isValidIdentifier(name) {
-		return 0, fmt.Errorf(
-			"invalid component name provided: %s",
-			name,
-		)
-	}
-
-	exists := slices.ContainsFunc(
-		s.components,
-		func(c component) bool {
-			return strings.EqualFold(name, c.name)
-		},
-	)
-	if exists {
-		return 0, fmt.Errorf(
-			"component with the name %s already exists",
-			name,
-		)
-	}
-
-	var t T
-	rt := reflect.TypeOf(t)
-
-	pID, err := registerPackage(s, rt.PkgPath())
-	if err != nil {
-		return 0, fmt.Errorf(
-			"failed to register component's package: %w",
-			err,
-		)
-	}
-
-	tp, ts, _ := strings.Cut(rt.String(), ".")
-	if ts == "" {
-		ts = tp
-	}
-
-	c := component{
-		pkgID:    pID,
-		typeName: ts,
-		name:     name,
-	}
-
-	s.components = append(s.components, c)
-
-	return len(s.components) - 1, nil
-}
-
-// MustRegisterComponent registers a new Component (for later use in the
-// definition of a Composition) of type T and the provided name. The Component
-// is registered to the provided Schema s.
-//
-// If an error is encountered, a panic occurs rather than an error being
-// returned. See RegisterComponent if this isn't desired.
-func MustRegisterComponent[T any](s *Schema, name string) ComponentID {
-	id, err := RegisterComponent[T](s, name)
-	if err != nil {
-		panic(
-			fmt.Errorf(
-				`failed to register component "%s": %w`,
-				name,
-				err,
-			),
-		)
-	}
-
-	return id
-}
-
 // registerPackage will attempt to register the provided import (imp) as new
 // package or return the ID of the matching, already registered import in the
 // provided Schema.
@@ -261,7 +216,7 @@ func MustRegisterComponent[T any](s *Schema, name string) ComponentID {
 // occur if the package can't be found (as it uses the destination as the
 // "location" context which may be a different project to where the tool is
 // being executed which may lead to such an error).
-func registerPackage(s *Schema, imp string) (int, error) {
+func (s *Schema) registerPackage(imp string) (int, error) {
 	for i := range s.packages {
 		if s.packages[i].Path != imp {
 			continue
@@ -324,47 +279,145 @@ func registerPackage(s *Schema, imp string) (int, error) {
 	return id, nil
 }
 
-// RegisterComposition registers to the provided Schema a Composition which
-// is a set of Components that make up an "entity type".
-//
-// The provided components must be unique to each other, and name must be unique
-// to the other Components. The name must also be a valid Go identifier.
-func RegisterComposition(
-	s *Schema,
-	name string,
-	components ...ComponentID,
-) error {
-	if !isValidIdentifier(name) {
-		return fmt.Errorf(
-			"invalid composition name provided: %s",
-			name,
+// registerComponent registers a new Component to the provided Schema for use in
+// the Composition it was provided via. The Component's name is the concrete
+// type of the Component implementation, and it's value type is the type
+// returned by Component.componentType().
+func (s *Schema) registerComponent(c Component) (ComponentID, error) {
+	nt := reflect.TypeOf(c)
+
+	id, ok := s.typeComponents[nt]
+	if ok {
+		return id, nil
+	}
+
+	exists := slices.ContainsFunc(
+		s.components,
+		func(c schemaComponent) bool {
+			return strings.EqualFold(nt.Name(), c.name)
+		},
+	)
+	if exists {
+		return 0, fmt.Errorf(
+			"component with the name %s already exists",
+			nt.Name(),
 		)
 	}
 
-	if !set.IsSet(components) {
-		return errors.New("duplicate components provided")
+	pID, err := s.registerPackage(c.componentType().PkgPath())
+	if err != nil {
+		return 0, fmt.Errorf(
+			"failed to register component's package: %w",
+			err,
+		)
+	}
+
+	tp, ts, _ := strings.Cut(c.componentType().String(), ".")
+	if ts == "" {
+		ts = tp
+	}
+
+	rc := schemaComponent{
+		pkgID:    pID,
+		typeName: ts,
+		name:     nt.Name(),
+	}
+
+	s.components = append(s.components, rc)
+
+	return len(s.components) - 1, nil
+}
+
+// registerComposition registers the provided Composition to the Schema. visited
+// is a list of the Compositions already processed within the provided
+// Composition and is used for cycle detection.
+func (s *Schema) registerComposition(
+	c Composition,
+	visited []reflect.Type,
+) (int, error) {
+	t := reflect.TypeOf(c)
+
+	for _, v := range visited {
+		if t == v {
+			return 0, fmt.Errorf(
+				"cyclic compositions are not allowed (%s repeats)",
+				t.String(),
+			)
+		}
+	}
+
+	// if composition already registered, return its ID
+	ec, ok := s.typeCompositions[t]
+	if ok {
+		return ec, nil
 	}
 
 	exists := slices.ContainsFunc(
 		s.compositions,
-		func(c composition) bool {
-			return strings.EqualFold(name, c.name)
+		func(c schemaComposition) bool {
+			return c.name == t.Name()
 		},
 	)
 	if exists {
-		return fmt.Errorf(
+		return 0, fmt.Errorf(
 			"composition with name %s already registered",
-			name,
+			t.Name(),
 		)
 	}
 
-	at := composition{
-		name:       name,
-		components: components,
+	at := schemaComposition{
+		name:       t.Name(),
+		components: nil,
+	}
+
+	for i := range t.NumField() {
+		f := t.Field(i)
+
+		if !f.Anonymous {
+			continue
+		}
+
+		fi := reflect.New(f.Type).Elem()
+
+		if f.Type.Implements(rtComponent) {
+			id, err := s.registerComponent(
+				fi.Interface().(Component),
+			)
+			if err != nil {
+				return 0, fmt.Errorf("failed to register component: %w", err)
+			}
+
+			at.components = append(at.components, id)
+
+			continue
+		}
+
+		if !f.Type.Implements(rtComposition) {
+			continue
+		}
+
+		subID, err := s.registerComposition(
+			fi.Interface().(Composition),
+			append(visited, t),
+		)
+		if err != nil {
+			// TODO handle err
+		}
+
+		at.components = append(
+			at.components,
+			s.compositions[subID].components...,
+		)
+	}
+
+	if !set.IsSet(at.components) {
+		// TODO consider documenting which components are duplicated in error below
+		return 0, errors.New("composition contains duplicate components")
 	}
 
 	i := len(s.compositions)
 	s.compositions = append(s.compositions, at)
+	s.typeCompositions[t] = i
 	s.compositionGraph = append(s.compositionGraph, nil)
 
 	// subtypes
@@ -386,6 +439,24 @@ func RegisterComposition(
 		}
 	}
 
+	return i, nil
+}
+
+// RegisterComposition registers to the provided Schema a Composition which
+// is a set of Components that make up an "entity type".
+//
+// The composition's name will be set to the concrete type of the provided
+// Composition, and its components will be any anonymous field of the provided
+// Composition that implements Composition or Component.
+//
+// Cyclic Compositions are not permitted, and the Components must be unique by
+// name (not type).
+func (s *Schema) RegisterComposition(c Composition) error {
+	_, err := s.registerComposition(c, []reflect.Type{})
+	if err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -398,17 +469,15 @@ func RegisterComposition(
 //
 // If an error is encountered, a panic occurs rather than an error being
 // returned. See RegisterComposition if this isn't desired.
-func MustRegisterComposition(
-	s *Schema,
-	name string,
-	components ...ComponentID,
+func (s *Schema) MustRegisterComposition(
+	c Composition,
 ) {
-	err := RegisterComposition(s, name, components...)
+	err := s.RegisterComposition(c)
 	if err != nil {
 		panic(
 			fmt.Errorf(
 				"failed to register composition %s: %w",
-				name,
+				reflect.TypeOf(c).String(),
 				err,
 			),
 		)
