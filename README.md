@@ -1,3 +1,55 @@
+# ⚠️ This project has moved to Codeberg
+
+**Development on GitHub has been permanently halted.** This repository is now
+archived and serves as a read-only historical record for existing dependencies.
+
+### New Home
+
+`fes` is still being maintained and updated. It can now be found at
+https://codeberg.org/rustedturnip/fes.
+
+### Why the move?
+My confidence in GitHub has been repeatedly knocked of late; given growing
+downtime, the recent
+[merge queue issue](https://www.githubstatus.com/incidents/zsg1lk7w13cf) causing
+silent reverts, and most recently the
+[source code breach](https://github.blog/security/investigating-unauthorized-access-to-githubs-internal-repositories/)
+and the risk of future vulnerability discovery that it brings, I have decided to
+migrate my projects to [Codeberg](codeberg.org).
+
+Codeberg is a non-profit, privacy-respecting, and open-source platform powered
+by Forgejo.
+[In their own words](https://github.blog/security/investigating-unauthorized-access-to-githubs-internal-repositories/):
+
+> The platform we choose for hosting says a lot about the values of our
+> ecosystem. Codeberg's open-source roots and non-profit status help assure us
+> that their interests are in the collaboration. Further, Codeberg's tooling is
+> moving toward federated interoperability which will make it even easier to
+> work across services in the future.
+
+### What you need to do:
+
+To make use of the latest version of `fes`, update your imports from
+```go
+import "github.com/rustedturnip/fes"
+```
+
+to
+
+```go
+  import "codeberg.org/rustedturnip/fes"
+```
+
+followed by running
+
+```shell
+go mod tidy
+```
+
+to remove the now-redundant dependency.
+
+---
+
 # `f`ast `e`ntity `s`torage
 
 `fes` is a library that is used to build custom entity storage in Go for 
